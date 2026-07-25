@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Bottom Liquid Wave Layer 1 (Purple Glow Wave) -->
+    <path android:pathData="M16,74 C32,66 54,84 72,70 C84,60 92,66 92,66 L92,88 L16,88 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="16"
+                android:startY="66"
+                android:endX="92"
+                android:endY="88"
+                android:type="linear">
+                <item android:color="#7738BDF8" android:offset="0.0" />
+                <item android:color="#99818CF8" android:offset="0.5" />
+                <item android:color="#BBA855F7" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bottom Liquid Wave Layer 2 (Cyan Liquid Ripple Wave) -->
+    <path android:pathData="M16,80 C36,68 56,82 76,74 C86,70 92,72 92,72 L92,88 L16,88 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="16"
+                android:startY="68"
+                android:endX="92"
+                android:endY="88"
+                android:type="linear">
+                <item android:color="#CC06B6D4" android:offset="0.0" />
+                <item android:color="#AA3B82F6" android:offset="0.6" />
+                <item android:color="#888B5CF6" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Floating Liquid Droplet -->
+    <path android:pathData="M76,54m-3,0a3,3 0 1,0 6,0a3,3 0 1,0 -6,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="73"
+                android:startY="51"
+                android:endX="79"
+                android:endY="57"
+                android:type="linear">
+                <item android:color="#FF60A5FA" android:offset="0.0" />
+                <item android:color="#FFA855F7" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Central Glass Music Note Stem and Beam -->
+    <path android:pathData="M51,55 L51,28 C51,28 62,22 71,32 C65,36 56,36 56,40 L56,55 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="51"
+                android:startY="28"
+                android:endX="71"
+                android:endY="55"
+                android:type="linear">
+                <item android:color="#FFEEF2FF" android:offset="0.0" />
+                <item android:color="#DD38BDF8" android:offset="0.6" />
+                <item android:color="#BB818CF8" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Glass Music Note Head (Glossy Sphere) -->
+    <path android:pathData="M44,56m-10,0a10,10 0 1,0 20,0a10,10 0 1,0 -20,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="41"
+                android:centerY="52"
+                android:gradientRadius="12"
+                android:type="radial">
+                <item android:color="#FFFFFFFF" android:offset="0.0" />
+                <item android:color="#E038BDF8" android:offset="0.5" />
+                <item android:color="#BB1E40AF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Glossy Highlight Reflection Ring on Note Head -->
+    <path android:pathData="M42,50 C44,48 48,48 50,51"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="42"
+                android:startY="48"
+                android:endX="50"
+                android:endY="51"
+                android:type="linear">
+                <item android:color="#FFFFFFFF" android:offset="0.0" />
+                <item android:color="#00FFFFFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Glass Contour Highlights -->
+    <path android:pathData="M51,28 C51,28 62,22 71,32"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="51"
+                android:startY="28"
+                android:endX="71"
+                android:endY="32"
+                android:type="linear">
+                <item android:color="#FFFFFFFF" android:offset="0.0" />
+                <item android:color="#8838BDF8" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

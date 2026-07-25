@@ -1,0 +1,6 @@
+{
+  "name": "FloWave",
+  "description": "Liquid Glass Music Player with Media3, local library scanning, synced lyrics, and AI insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

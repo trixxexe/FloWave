@@ -1,0 +1,274 @@
+package com.trixxexe.trixxwave.service
+
+import android.app.PendingIntent
+import android.content.Intent
+import android.graphics.Color as AndroidColor
+import android.os.Binder
+import android.os.IBinder
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.MediaNotification
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+import com.google.common.collect.ImmutableList
+import com.trixxexe.trixxwave.MainActivity
+import com.trixxexe.trixxwave.TrixxWaveApp
+import com.trixxexe.trixxwave.media.AudioEqualizerManager
+import com.trixxexe.trixxwave.media.AudioVisualizerHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+class PlaybackService : MediaSessionService() {
+
+    private var player: ExoPlayer? = null
+    private var mediaSession: MediaSession? = null
+    private var playerListener: Player.Listener? = null
+    private var customNotificationProvider: CustomMediaNotificationProvider? = null
+
+    val equalizerManager = AudioEqualizerManager()
+    val visualizerHelper = AudioVisualizerHelper()
+
+    private val binder = LocalBinder()
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var sleepTimerJob: Job? = null
+
+    inner class LocalBinder : Binder() {
+        fun getService(): PlaybackService = this@PlaybackService
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+
+        val exoPlayer = ExoPlayer.Builder(this)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build(),
+                true
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build()
+
+        player = exoPlayer
+
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        mediaSession = MediaSession.Builder(this, exoPlayer)
+            .setSessionActivity(pendingIntent)
+            .build()
+
+        val notificationProvider = CustomMediaNotificationProvider(
+            this,
+            AndroidColor.parseColor("#F27D26")
+        )
+        customNotificationProvider = notificationProvider
+        setMediaNotificationProvider(notificationProvider)
+
+        val app = application as? TrixxWaveApp
+        if (app != null) {
+            serviceScope.launch {
+                app.themePreferences.themeConfigFlow.collect { config ->
+                    val colorInt = try {
+                        AndroidColor.parseColor(config.accentColorHex)
+                    } catch (e: Exception) {
+                        AndroidColor.parseColor("#F27D26")
+                    }
+                    notificationProvider.updateAccentColor(colorInt)
+                    setMediaNotificationProvider(notificationProvider)
+                }
+            }
+        }
+
+        val listener = object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                if (audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
+                    equalizerManager.initAudioEffects(audioSessionId)
+                    visualizerHelper.attachToAudioSession(audioSessionId, serviceScope, exoPlayer.isPlaying)
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                val audioSessionId = exoPlayer.audioSessionId
+                visualizerHelper.attachToAudioSession(audioSessionId, serviceScope, isPlaying)
+            }
+        }
+        playerListener = listener
+        exoPlayer.addListener(listener)
+    }
+
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        return mediaSession
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        super.onBind(intent)
+        return binder
+    }
+
+    fun startSleepTimer(minutes: Int, onTimerFinished: () -> Unit) {
+        sleepTimerJob?.cancel()
+        if (minutes <= 0) return
+
+        sleepTimerJob = serviceScope.launch {
+            val totalMs = minutes * 60 * 1000L
+            val fadeMs = 10000L // 10 second gradual fade out
+            val normalMs = (totalMs - fadeMs).coerceAtLeast(0L)
+
+            delay(normalMs)
+
+            val p = player ?: return@launch
+            val startVol = p.volume
+            val steps = 20
+            val stepDelay = fadeMs / steps
+
+            for (i in steps downTo 0) {
+                p.volume = startVol * (i.toFloat() / steps)
+                delay(stepDelay)
+            }
+
+            p.pause()
+            p.volume = startVol
+            onTimerFinished()
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        player?.volume = 1.0f
+    }
+
+    fun getCurrentPosition(): Long {
+        return player?.currentPosition ?: 0L
+    }
+
+    fun prepareTrackForResume(song: com.trixxexe.trixxwave.data.db.Song, queue: List<com.trixxexe.trixxwave.data.db.Song> = emptyList(), positionMs: Long = 0L, isGaplessEnabled: Boolean = true) {
+        val p = player ?: return
+        p.clearMediaItems()
+
+        val playlist = if (queue.isNotEmpty()) queue else listOf(song)
+        val mediaItems = playlist.map { s ->
+            val builder = MediaItem.Builder()
+                .setMediaId(s.id.toString())
+                .setUri(s.filePath)
+
+            if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
+                val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(s.trimStartMs)
+
+                if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
+                    clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(s.trimStartMs + 500L))
+                }
+                builder.setClippingConfiguration(clippingBuilder.build())
+            }
+
+            builder.build()
+        }
+
+        p.setMediaItems(mediaItems)
+        val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+        p.seekTo(songIndex, positionMs)
+        p.prepare()
+        p.pause()
+    }
+
+    fun playTrackWithGapless(song: com.trixxexe.trixxwave.data.db.Song, queue: List<com.trixxexe.trixxwave.data.db.Song> = emptyList(), isGaplessEnabled: Boolean = true) {
+        val p = player ?: return
+        p.clearMediaItems()
+
+        val playlist = if (queue.isNotEmpty()) queue else listOf(song)
+        val mediaItems = playlist.map { s ->
+            val builder = MediaItem.Builder()
+                .setMediaId(s.id.toString())
+                .setUri(s.filePath)
+
+            if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
+                val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(s.trimStartMs)
+
+                if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
+                    clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(s.trimStartMs + 500L))
+                }
+                builder.setClippingConfiguration(clippingBuilder.build())
+            }
+
+            builder.build()
+        }
+
+        p.setMediaItems(mediaItems)
+        val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+        p.seekTo(songIndex, if (isGaplessEnabled) song.trimStartMs else 0L)
+        p.prepare()
+        p.play()
+    }
+
+    override fun onDestroy() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        equalizerManager.release()
+        visualizerHelper.release()
+        playerListener?.let { player?.removeListener(it) }
+        playerListener = null
+        mediaSession?.run {
+            player.release()
+            release()
+            mediaSession = null
+        }
+        player = null
+        serviceScope.cancel()
+        super.onDestroy()
+    }
+}
+
+private class CustomMediaNotificationProvider(
+    context: android.content.Context,
+    private var accentColorInt: Int
+) : MediaNotification.Provider {
+
+    private val defaultProvider = DefaultMediaNotificationProvider.Builder(context).build()
+
+    fun updateAccentColor(colorInt: Int) {
+        this.accentColorInt = colorInt
+    }
+
+    override fun createNotification(
+        mediaSession: MediaSession,
+        customLayout: ImmutableList<CommandButton>,
+        actionFactory: MediaNotification.ActionFactory,
+        callback: MediaNotification.Provider.Callback
+    ): MediaNotification {
+        val mediaNotification = defaultProvider.createNotification(
+            mediaSession,
+            customLayout,
+            actionFactory,
+            callback
+        )
+        // Apply per-theme accent color to system media notification & media controls tint
+        mediaNotification.notification.color = accentColorInt
+        return mediaNotification
+    }
+
+    override fun handleCustomCommand(
+        session: MediaSession,
+        action: String,
+        extras: android.os.Bundle
+    ): Boolean {
+        return defaultProvider.handleCustomCommand(session, action, extras)
+    }
+}

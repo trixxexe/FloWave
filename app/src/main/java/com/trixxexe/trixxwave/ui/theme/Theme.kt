@@ -1,0 +1,60 @@
+package com.trixxexe.trixxwave.ui.theme
+
+import android.app.Activity
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import com.trixxexe.trixxwave.data.preferences.ThemeConfig
+
+private val DarkColorScheme = darkColorScheme(
+    primary = WarmOrangeAccent,
+    secondary = SleekPurple,
+    tertiary = NeonPink,
+    background = GlassObsidianBackground,
+    surface = GlassObsidianSurface,
+    onPrimary = Color.Black,
+    onSecondary = Color.White,
+    onBackground = TextPrimaryDark,
+    onSurface = TextPrimaryDark
+)
+
+@Composable
+fun TrixxWaveTheme(
+    themeConfig: ThemeConfig = ThemeConfig(),
+    content: @Composable () -> Unit
+) {
+    val accentColor = try {
+        Color(android.graphics.Color.parseColor(themeConfig.accentColorHex))
+    } catch (e: Exception) {
+        NeonCyan
+    }
+
+    val colorScheme = DarkColorScheme.copy(
+        primary = accentColor
+    )
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = Color.Transparent.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
+        }
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
