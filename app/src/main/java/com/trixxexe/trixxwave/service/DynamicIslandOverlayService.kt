@@ -176,8 +176,30 @@ class DynamicIslandOverlayService : Service(), LifecycleOwner, ViewModelStoreOwn
                 var isLiked by remember { mutableStateOf(WidgetStateStore.isLiked(this@DynamicIslandOverlayService)) }
                 var artUri by remember { mutableStateOf(WidgetStateStore.getAlbumArtUri(this@DynamicIslandOverlayService)) }
 
-                val bands = remember { floatArrayOf(0.4f, 0.7f, 0.3f, 0.9f, 0.6f, 0.8f, 0.2f, 0.5f) }
-                val waveform = remember { FloatArray(32) { (Math.random() * 0.8).toFloat() } }
+                var bands by remember { mutableStateOf(floatArrayOf(0.4f, 0.7f, 0.3f, 0.9f, 0.6f, 0.8f, 0.2f, 0.5f)) }
+                var waveform by remember { mutableStateOf(FloatArray(32) { 0.2f }) }
+
+                LaunchedEffect(isPlaying) {
+                    var step = 0
+                    while (isPlaying) {
+                        step++
+                        val newBands = FloatArray(8) { i ->
+                            val sinVal = kotlin.math.sin(step * 0.35 + i * 0.9).toFloat()
+                            val normalized = (sinVal + 1f) / 2f
+                            (0.15f + normalized * 0.75f + (Math.random() * 0.1f).toFloat()).coerceIn(0.15f, 1f)
+                        }
+                        val newWaveform = FloatArray(32) { i ->
+                            (kotlin.math.sin(step * 0.25 + i * 0.5) * 0.6).toFloat()
+                        }
+                        bands = newBands
+                        waveform = newWaveform
+                        delay(60L)
+                    }
+                    if (!isPlaying) {
+                        bands = floatArrayOf(0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f)
+                        waveform = FloatArray(32) { 0f }
+                    }
+                }
 
                 LaunchedEffect(Unit) {
                     while (true) {

@@ -196,20 +196,15 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect(currentSong?.id, isPlaying, themeConfig.gaplessEnabled, isBound) {
                 val song = currentSong
-                if (song != null) {
+                if (song != null && isBound) {
                     if (isPlaying) {
                         playbackService?.playTrackWithGapless(
                             song = song,
                             queue = mainViewModel.playbackQueue.value,
                             isGaplessEnabled = themeConfig.gaplessEnabled
                         )
-                    } else if (isBound) {
-                        playbackService?.prepareTrackForResume(
-                            song = song,
-                            queue = mainViewModel.playbackQueue.value,
-                            positionMs = currentPositionMs,
-                            isGaplessEnabled = themeConfig.gaplessEnabled
-                        )
+                    } else {
+                        playbackService?.pause()
                     }
                 }
             }
@@ -292,7 +287,10 @@ class MainActivity : ComponentActivity() {
                                             onPlayPauseToggle = { mainViewModel.togglePlayPause() },
                                             onSkipNext = { mainViewModel.skipNext() },
                                             onSkipPrevious = { mainViewModel.skipPrevious() },
-                                            onSeek = { pos -> mainViewModel.seekToPosition(pos) },
+                                            onSeek = { pos ->
+                                                mainViewModel.seekToPosition(pos)
+                                                playbackService?.seekTo(pos)
+                                            },
                                             onToggleLike = { song -> mainViewModel.toggleLikeSong(song) },
                                             onExpandNowPlaying = { showNowPlayingModal = true },
                                             themeConfig = themeConfig
@@ -383,7 +381,8 @@ class MainActivity : ComponentActivity() {
                                     themeConfig = themeConfig,
                                     onPlaylistClick = { pl -> selectedPlaylistForDetail = pl },
                                     onSongClick = { song -> mainViewModel.playSong(song) },
-                                    onRescanLibrary = { settingsViewModel.rescanLibrary() }
+                                    onRescanLibrary = { settingsViewModel.rescanLibrary() },
+                                    onCreatePlaylist = { name, desc -> mainViewModel.createCustomPlaylist(name, desc) }
                                 )
                             }
                             composable("settings") {
@@ -483,7 +482,10 @@ class MainActivity : ComponentActivity() {
                             onPlayPauseToggle = { mainViewModel.togglePlayPause() },
                             onSkipNext = { mainViewModel.skipNext() },
                             onSkipPrevious = { mainViewModel.skipPrevious() },
-                            onSeek = { pos -> mainViewModel.seekToPosition(pos) },
+                            onSeek = { pos ->
+                                mainViewModel.seekToPosition(pos)
+                                playbackService?.seekTo(pos)
+                            },
                             onToggleLike = { song -> mainViewModel.toggleLikeSong(song) },
                             onDismiss = { showNowPlayingModal = false },
                             onReTag = { song -> mainViewModel.reTagSongWithAi(song) },

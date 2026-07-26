@@ -222,12 +222,37 @@ class PlaybackService : MediaSessionService() {
         return player?.currentPosition ?: 0L
     }
 
+    fun play() {
+        try {
+            player?.play()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
+    fun pause() {
+        try {
+            player?.pause()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
+    fun seekTo(positionMs: Long) {
+        try {
+            player?.seekTo(positionMs)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
     fun prepareTrackForResume(song: com.trixxexe.trixxwave.data.db.Song, queue: List<com.trixxexe.trixxwave.data.db.Song> = emptyList(), positionMs: Long = 0L, isGaplessEnabled: Boolean = true) {
         val p = player ?: return
         try {
             val targetId = song.id.toString()
 
             if (p.currentMediaItem?.mediaId == targetId) {
+                p.pause()
                 return
             }
 

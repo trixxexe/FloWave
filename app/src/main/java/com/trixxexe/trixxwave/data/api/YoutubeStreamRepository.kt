@@ -188,7 +188,7 @@ class YoutubeStreamRepository(private val context: Context) {
             try {
                 val req = Request.Builder()
                     .url(apiBase + cleanId)
-                    .header("User-Agent", "FloWave-Client/1.0")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                     .build()
 
                 client.newCall(req).execute().use { response ->
