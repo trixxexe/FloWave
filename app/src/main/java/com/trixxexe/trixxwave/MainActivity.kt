@@ -81,11 +81,6 @@ class MainActivity : ComponentActivity() {
         // Safely bind PlaybackService
         try {
             val serviceIntent = Intent(this, PlaybackService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
             bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -133,12 +128,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val visualizerBands = playbackService?.visualizerHelper?.fftBands?.collectAsState()?.value
-                ?: FloatArray(20) { 0.1f }
-
-            val visualizerWaveform = playbackService?.visualizerHelper?.waveformPoints?.collectAsState()?.value
-                ?: FloatArray(32) { 0f }
-
             val gaplessState by mainViewModel.gaplessState.collectAsState()
             val recentSearches by mainViewModel.recentSearches.collectAsState()
 
@@ -178,12 +167,19 @@ class MainActivity : ComponentActivity() {
             }
 
             var selectedPlaylistForDetail by remember { mutableStateOf<Playlist?>(null) }
-            val playlistSongsFlow = remember(selectedPlaylistForDetail) {
-                selectedPlaylistForDetail?.let { mainViewModel.getSongsForPlaylist(it.id) }
+            val playlistSongsFlow = remember(selectedPlaylistForDetail, allSongs, likedSongs) {
+                selectedPlaylistForDetail?.let { pl ->
+                    when (pl.id) {
+                        -100L -> kotlinx.coroutines.flow.flowOf(allSongs.sortedByDescending { it.dateAdded }.take(30))
+                        -101L -> kotlinx.coroutines.flow.flowOf(allSongs.sortedByDescending { it.playCount }.take(30))
+                        -102L -> kotlinx.coroutines.flow.flowOf(if (likedSongs.isNotEmpty()) likedSongs else allSongs.filter { it.isLiked }.ifEmpty { allSongs.take(20) })
+                        else -> mainViewModel.getSongsForPlaylist(pl.id)
+                    }
+                }
             }
             val playlistSongs by (playlistSongsFlow?.collectAsState(initial = emptyList()) ?: remember { mutableStateOf(emptyList<Song>()) })
 
-            LaunchedEffect(currentSong, isPlaying, themeConfig.gaplessEnabled, isBound) {
+            LaunchedEffect(currentSong?.id, isPlaying, themeConfig.gaplessEnabled, isBound) {
                 val song = currentSong
                 if (song != null) {
                     if (isPlaying) {
@@ -438,8 +434,7 @@ class MainActivity : ComponentActivity() {
                             song = currentSong,
                             isPlaying = isPlaying,
                             currentPositionMs = currentPositionMs,
-                            bands = visualizerBands,
-                            waveform = visualizerWaveform,
+                            visualizerHelper = playbackService?.visualizerHelper,
                             themeConfig = themeConfig,
                             onPlayPauseToggle = { mainViewModel.togglePlayPause() },
                             onSkipNext = { mainViewModel.skipNext() },
@@ -466,8 +461,7 @@ class MainActivity : ComponentActivity() {
                             song = currentSong,
                             isPlaying = isPlaying,
                             currentPositionMs = currentPositionMs,
-                            visualizerBands = visualizerBands,
-                            visualizerWaveform = visualizerWaveform,
+                            visualizerHelper = playbackService?.visualizerHelper,
                             lyrics = lyrics,
                             aiInsight = aiInsight,
                             themeConfig = themeConfig,

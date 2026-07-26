@@ -212,6 +212,12 @@ class PlaybackService : MediaSessionService() {
 
     fun prepareTrackForResume(song: com.trixxexe.trixxwave.data.db.Song, queue: List<com.trixxexe.trixxwave.data.db.Song> = emptyList(), positionMs: Long = 0L, isGaplessEnabled: Boolean = true) {
         val p = player ?: return
+        val targetId = song.id.toString()
+
+        if (p.currentMediaItem?.mediaId == targetId) {
+            return
+        }
+
         p.clearMediaItems()
 
         val playlist = if (queue.isNotEmpty()) queue else listOf(song)
@@ -251,6 +257,15 @@ class PlaybackService : MediaSessionService() {
 
     fun playTrackWithGapless(song: com.trixxexe.trixxwave.data.db.Song, queue: List<com.trixxexe.trixxwave.data.db.Song> = emptyList(), isGaplessEnabled: Boolean = true) {
         val p = player ?: return
+        val targetId = song.id.toString()
+
+        if (p.currentMediaItem?.mediaId == targetId) {
+            if (!p.isPlaying) {
+                p.play()
+            }
+            return
+        }
+
         p.clearMediaItems()
 
         val playlist = if (queue.isNotEmpty()) queue else listOf(song)

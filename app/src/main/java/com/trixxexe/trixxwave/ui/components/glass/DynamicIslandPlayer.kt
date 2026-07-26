@@ -35,8 +35,9 @@ fun DynamicIslandPlayer(
     song: Song?,
     isPlaying: Boolean,
     currentPositionMs: Long,
-    bands: FloatArray,
+    bands: FloatArray = FloatArray(20) { 0.1f },
     waveform: FloatArray = FloatArray(32),
+    visualizerHelper: com.trixxexe.trixxwave.media.AudioVisualizerHelper? = null,
     themeConfig: ThemeConfig,
     onPlayPauseToggle: () -> Unit,
     onSkipNext: () -> Unit,
@@ -46,6 +47,9 @@ fun DynamicIslandPlayer(
     modifier: Modifier = Modifier
 ) {
     if (song == null || !themeConfig.dynamicIslandEnabled) return
+
+    val currentBands = visualizerHelper?.fftBands?.collectAsState()?.value ?: bands
+    val currentWaveform = visualizerHelper?.waveformPoints?.collectAsState()?.value ?: waveform
 
     var isExpanded by remember { mutableStateOf(false) }
     val accentColor = getThemeAccentColor(themeConfig)
@@ -143,8 +147,8 @@ fun DynamicIslandPlayer(
 
                         // Mini visualizer bars
                         CustomVisualizerView(
-                            bands = bands,
-                            waveform = waveform,
+                            bands = currentBands,
+                            waveform = currentWaveform,
                             style = "Spectrum",
                             accentColor = accentColor,
                             height = 16.dp,
@@ -240,8 +244,8 @@ fun DynamicIslandPlayer(
 
                     // Audio Visualizer Canvas Wave
                     CustomVisualizerView(
-                        bands = bands,
-                        waveform = waveform,
+                        bands = currentBands,
+                        waveform = currentWaveform,
                         style = themeConfig.visualizerStyle,
                         accentColor = accentColor,
                         height = 30.dp,

@@ -42,8 +42,9 @@ fun NowPlayingScreen(
     song: Song?,
     isPlaying: Boolean,
     currentPositionMs: Long,
-    visualizerBands: FloatArray,
+    visualizerBands: FloatArray = FloatArray(20) { 0.1f },
     visualizerWaveform: FloatArray = FloatArray(32),
+    visualizerHelper: com.trixxexe.trixxwave.media.AudioVisualizerHelper? = null,
     lyrics: LyricsCache?,
     aiInsight: String?,
     themeConfig: ThemeConfig,
@@ -57,6 +58,9 @@ fun NowPlayingScreen(
     onSaveLyrics: ((Long, String?, String?) -> Unit)? = null
 ) {
     if (song == null) return
+
+    val currentBands = visualizerHelper?.fftBands?.collectAsState()?.value ?: visualizerBands
+    val currentWaveform = visualizerHelper?.waveformPoints?.collectAsState()?.value ?: visualizerWaveform
 
     var activeTab by remember { mutableStateOf(0) } // 0: Art & Controls, 1: Lyrics, 2: AI Insights
     var isShuffle by remember { mutableStateOf(false) }
@@ -216,8 +220,8 @@ fun NowPlayingScreen(
 
                     // Audio Visualizer
                     CustomVisualizerView(
-                        bands = visualizerBands,
-                        waveform = visualizerWaveform,
+                        bands = currentBands,
+                        waveform = currentWaveform,
                         style = themeConfig.visualizerStyle,
                         accentColor = accentColor,
                         height = 50.dp,
