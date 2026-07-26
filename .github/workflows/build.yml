@@ -28,18 +28,28 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # FloWave has no committed gradlew, so install Gradle directly instead of
-      # relying on a wrapper that doesn't exist yet.
-      - name: Set up Gradle
+      # AGP 9.1.1 requires Gradle 9.1.0+, this is a hard requirement (no fallback to 8.x).
+      - name: Set up Gradle 9.1.0
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: current
+          gradle-version: "9.1.0"
 
+      - name: Install Android SDK components (API 36 / build-tools 36.0.0)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      # FloWave has no committed gradlew, so install Gradle directly instead of
+      # relying on a wrapper that doesn't exist yet.
       - name: Generate Gradle wrapper if missing
         run: |
           if [ ! -f "./gradlew" ]; then
             echo "No wrapper found - generating one."
-            gradle wrapper --gradle-version 8.11.1
+            gradle wrapper --gradle-version 9.1.0
             chmod +x ./gradlew
           fi
 
@@ -53,11 +63,12 @@ jobs:
             git push
           fi
 
-      - name: Generate debug keystore if missing
+      # NOTE: this must match app/build.gradle.kts signingConfigs.debugConfig exactly:
+      # file at repo ROOT named debug.keystore, alias androiddebugkey, password android.
+      - name: Generate debug keystore at repo root if missing
         run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkey -v -keystore ~/.android/debug.keystore \
+          if [ ! -f "./debug.keystore" ]; then
+            keytool -genkey -v -keystore ./debug.keystore \
               -storepass android -alias androiddebugkey -keypass android \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=FloWave Debug,O=Trixx,C=IN"
