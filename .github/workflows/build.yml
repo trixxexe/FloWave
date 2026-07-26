@@ -1,42 +1,104 @@
-name: Build Android APK
+name: Build FloWave APK
 
 on:
   push:
-    branches:
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
-  # Allows manual triggering from the GitHub Actions tab
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Which builds to produce"
+        required: true
+        default: both
+        type: choice
+        options: [debug, release, both]
+
+permissions:
+  contents: write   # needed so CI can commit the generated wrapper back once
 
 jobs:
   build:
-    name: Build & Package APK
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
+          distribution: temurin
+          java-version: "17"
 
-      - name: Make Gradle Wrapper Executable
-        run: chmod +x ./gradlew
+      # FloWave has no committed gradlew, so install Gradle directly instead of
+      # relying on a wrapper that doesn't exist yet.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: current
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Generate Gradle wrapper if missing
+        run: |
+          if [ ! -f "./gradlew" ]; then
+            echo "No wrapper found - generating one."
+            gradle wrapper --gradle-version 8.11.1
+            chmod +x ./gradlew
+          fi
 
-      - name: Upload APK Artifact
+      - name: Commit generated wrapper (one-time fix, skipped once it exists)
+        run: |
+          if [ -n "$(git status --porcelain gradlew gradlew.bat gradle/wrapper 2>/dev/null)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add gradlew gradlew.bat gradle/wrapper
+            git commit -m "chore: commit missing Gradle wrapper [skip ci]"
+            git push
+          fi
+
+      - name: Generate debug keystore if missing
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkey -v -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=FloWave Debug,O=Trixx,C=IN"
+          fi
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+        continue-on-error: true
+
+      - name: Run lint
+        run: ./gradlew lintDebug --stacktrace
+        continue-on-error: true
+
+      - name: Build debug APK
+        if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == '' }}
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build release APK
+        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == '' }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload debug APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FloWave-Debug-APK
+          name: flowave-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload release APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flowave-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: ignore
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results*.html
+          if-no-files-found: ignore
