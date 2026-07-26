@@ -101,20 +101,28 @@ class PlaybackService : MediaSessionService() {
 
         val listener = object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                if (audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
-                    equalizerManager.initAudioEffects(audioSessionId)
-                    visualizerHelper.attachToAudioSession(audioSessionId, serviceScope, exoPlayer.isPlaying)
+                try {
+                    if (audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
+                        equalizerManager.initAudioEffects(audioSessionId)
+                        visualizerHelper.attachToAudioSession(audioSessionId, serviceScope, exoPlayer.isPlaying)
+                    }
+                } catch (e: Throwable) {
+                    e.printStackTrace()
                 }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val audioSessionId = exoPlayer.audioSessionId
-                visualizerHelper.attachToAudioSession(audioSessionId, serviceScope, isPlaying)
-                updateWidgetFromPlayer()
-                if (isPlaying) {
-                    startWidgetProgressLoop()
-                } else {
-                    widgetPingJob?.cancel()
+                try {
+                    val audioSessionId = exoPlayer.audioSessionId
+                    visualizerHelper.attachToAudioSession(audioSessionId, serviceScope, isPlaying)
+                    updateWidgetFromPlayer()
+                    if (isPlaying) {
+                        startWidgetProgressLoop()
+                    } else {
+                        widgetPingJob?.cancel()
+                    }
+                } catch (e: Throwable) {
+                    e.printStackTrace()
                 }
             }
 
@@ -124,6 +132,10 @@ class PlaybackService : MediaSessionService() {
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 updateWidgetFromPlayer()
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.e("PlaybackService", "ExoPlayer error: ${error.message}", error)
             }
         }
         playerListener = listener
@@ -212,98 +224,128 @@ class PlaybackService : MediaSessionService() {
 
     fun prepareTrackForResume(song: com.trixxexe.trixxwave.data.db.Song, queue: List<com.trixxexe.trixxwave.data.db.Song> = emptyList(), positionMs: Long = 0L, isGaplessEnabled: Boolean = true) {
         val p = player ?: return
-        val targetId = song.id.toString()
+        try {
+            val targetId = song.id.toString()
 
-        if (p.currentMediaItem?.mediaId == targetId) {
-            return
-        }
-
-        p.clearMediaItems()
-
-        val playlist = if (queue.isNotEmpty()) queue else listOf(song)
-        val mediaItems = playlist.map { s ->
-            val metadata = androidx.media3.common.MediaMetadata.Builder()
-                .setTitle(s.title)
-                .setArtist(s.artist)
-                .setAlbumTitle(s.album)
-                .setArtworkUri(s.albumArtUri?.let { android.net.Uri.parse(it) })
-                .build()
-
-            val uriToPlay = s.streamUrl?.takeIf { it.isNotBlank() } ?: s.filePath
-            val builder = MediaItem.Builder()
-                .setMediaId(s.id.toString())
-                .setUri(uriToPlay)
-                .setMediaMetadata(metadata)
-
-            if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
-                val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(s.trimStartMs)
-
-                if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
-                    clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(s.trimStartMs + 500L))
-                }
-                builder.setClippingConfiguration(clippingBuilder.build())
+            if (p.currentMediaItem?.mediaId == targetId) {
+                return
             }
 
-            builder.build()
-        }
+            p.clearMediaItems()
 
-        p.setMediaItems(mediaItems)
-        val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
-        p.seekTo(songIndex, positionMs)
-        p.prepare()
-        p.pause()
+            val playlist = if (queue.isNotEmpty()) queue else listOf(song)
+            val mediaItems = playlist.map { s ->
+                val metadata = androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(s.title)
+                    .setArtist(s.artist)
+                    .setAlbumTitle(s.album)
+                    .setArtworkUri(s.albumArtUri?.let { android.net.Uri.parse(it) })
+                    .build()
+
+                val rawUri = s.streamUrl?.takeIf { it.isNotBlank() } ?: s.filePath
+                val androidUri = if (rawUri.startsWith("/")) {
+                    android.net.Uri.fromFile(java.io.File(rawUri))
+                } else {
+                    android.net.Uri.parse(rawUri)
+                }
+
+                val builder = MediaItem.Builder()
+                    .setMediaId(s.id.toString())
+                    .setUri(androidUri)
+                    .setMediaMetadata(metadata)
+
+                if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
+                    val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(s.trimStartMs)
+
+                    if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
+                        clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(s.trimStartMs + 500L))
+                    }
+                    builder.setClippingConfiguration(clippingBuilder.build())
+                }
+
+                builder.build()
+            }
+
+            p.setMediaItems(mediaItems)
+            val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+            p.seekTo(songIndex, positionMs)
+            p.prepare()
+            p.pause()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 
     fun playTrackWithGapless(song: com.trixxexe.trixxwave.data.db.Song, queue: List<com.trixxexe.trixxwave.data.db.Song> = emptyList(), isGaplessEnabled: Boolean = true) {
         val p = player ?: return
-        val targetId = song.id.toString()
+        try {
+            val targetId = song.id.toString()
 
-        if (p.currentMediaItem?.mediaId == targetId) {
-            if (!p.isPlaying) {
-                p.play()
-            }
-            return
-        }
-
-        p.clearMediaItems()
-
-        val playlist = if (queue.isNotEmpty()) queue else listOf(song)
-        val mediaItems = playlist.map { s ->
-            val metadata = androidx.media3.common.MediaMetadata.Builder()
-                .setTitle(s.title)
-                .setArtist(s.artist)
-                .setAlbumTitle(s.album)
-                .setArtworkUri(s.albumArtUri?.let { android.net.Uri.parse(it) })
-                .build()
-
-            val uriToPlay = s.streamUrl?.takeIf { it.isNotBlank() } ?: s.filePath
-            val builder = MediaItem.Builder()
-                .setMediaId(s.id.toString())
-                .setUri(uriToPlay)
-                .setMediaMetadata(metadata)
-
-            if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
-                val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(s.trimStartMs)
-
-                if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
-                    clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(s.trimStartMs + 500L))
+            if (p.currentMediaItem?.mediaId == targetId) {
+                if (!p.isPlaying) {
+                    p.play()
                 }
-                builder.setClippingConfiguration(clippingBuilder.build())
+                return
             }
 
-            builder.build()
-        }
+            p.clearMediaItems()
 
-        p.setMediaItems(mediaItems)
-        val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
-        p.seekTo(songIndex, if (isGaplessEnabled) song.trimStartMs else 0L)
-        p.prepare()
-        p.play()
+            val playlist = if (queue.isNotEmpty()) queue else listOf(song)
+            val mediaItems = playlist.map { s ->
+                val metadata = androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(s.title)
+                    .setArtist(s.artist)
+                    .setAlbumTitle(s.album)
+                    .setArtworkUri(s.albumArtUri?.let { android.net.Uri.parse(it) })
+                    .build()
+
+                val rawUri = s.streamUrl?.takeIf { it.isNotBlank() } ?: s.filePath
+                val androidUri = if (rawUri.startsWith("/")) {
+                    android.net.Uri.fromFile(java.io.File(rawUri))
+                } else {
+                    android.net.Uri.parse(rawUri)
+                }
+
+                val builder = MediaItem.Builder()
+                    .setMediaId(s.id.toString())
+                    .setUri(androidUri)
+                    .setMediaMetadata(metadata)
+
+                if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
+                    val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(s.trimStartMs)
+
+                    if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
+                        clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(s.trimStartMs + 500L))
+                    }
+                    builder.setClippingConfiguration(clippingBuilder.build())
+                }
+
+                builder.build()
+            }
+
+            p.setMediaItems(mediaItems)
+            val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+            p.seekTo(songIndex, if (isGaplessEnabled) song.trimStartMs else 0L)
+            p.prepare()
+            p.play()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        try {
+            DynamicIslandOverlayService.stopService(this)
+        } catch (_: Throwable) {}
     }
 
     override fun onDestroy() {
+        try {
+            DynamicIslandOverlayService.stopService(this)
+        } catch (_: Throwable) {}
         widgetPingJob?.cancel()
         widgetPingJob = null
         sleepTimerJob?.cancel()

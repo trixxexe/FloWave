@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
@@ -79,7 +81,7 @@ class YoutubeStreamRepository(private val context: Context) {
             val initMethod = youtubeDlClass.getMethod("init", Context::class.java)
             initMethod.invoke(instance, appContext.applicationContext)
             isYtdlInitialized = true
-        } catch (e1: Exception) {
+        } catch (e1: Throwable) {
             try {
                 // Alternative package names for youtubedl-android
                 val youtubeDlClass = Class.forName("com.ya27.youtubedl.YoutubeDL")
@@ -88,7 +90,7 @@ class YoutubeStreamRepository(private val context: Context) {
                 val initMethod = youtubeDlClass.getMethod("init", Context::class.java)
                 initMethod.invoke(instance, appContext.applicationContext)
                 isYtdlInitialized = true
-            } catch (e2: Exception) {
+            } catch (e2: Throwable) {
                 // Binary init will fall back cleanly to high-speed open API stream extractor
             }
         }
@@ -102,7 +104,7 @@ class YoutubeStreamRepository(private val context: Context) {
             val updateMethod = youtubeDlClass.getMethod("updateYoutubeDL", Context::class.java)
             updateMethod.invoke(instance, appContext.applicationContext)
             true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             false
         }
     }
@@ -116,7 +118,7 @@ class YoutubeStreamRepository(private val context: Context) {
             if (ytdlResult != null) return@withContext ytdlResult
         }
 
-        // 2. High-speed open API fallback (Piped / Invidious stream API)
+        // 2. High-speed open API fallback (Cobalt / Piped / Invidious stream API)
         return@withContext tryExtractApiFallback(videoId)
     }
 
@@ -160,19 +162,27 @@ class YoutubeStreamRepository(private val context: Context) {
                 streamUrl = streamUrl,
                 format = ext
             )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             null
         }
     }
 
     private fun tryExtractApiFallback(videoId: String): StreamExtractionResult? {
+        val cleanId = extractVideoId(videoId) ?: videoId
+
+        // A. Cobalt API direct audio stream extraction
+        try {
+            val cobaltResult = tryExtractCobaltApi(cleanId)
+            if (cobaltResult != null) return cobaltResult
+        } catch (_: Throwable) {}
+
+        // B. Piped API multi-instance fallback
         val pipedApis = listOf(
             "https://pipedapi.kavin.rocks/streams/",
             "https://api.piped.video/streams/",
-            "https://pipedapi.mha.fi/streams/"
+            "https://pipedapi.mha.fi/streams/",
+            "https://pipedapi.drgns.space/streams/"
         )
-
-        val cleanId = extractVideoId(videoId) ?: videoId
 
         for (apiBase in pipedApis) {
             try {
@@ -196,23 +206,80 @@ class YoutubeStreamRepository(private val context: Context) {
                         format = audioStream.mimeType ?: "audio/m4a"
                     )
                 }
-            } catch (_: Exception) {
+            } catch (_: Throwable) {
                 // Continue to next endpoint
             }
         }
 
-        // Direct audio stream endpoint via Invidious (itag 140 = M4A 128kbps audio stream)
-        val directAudioStreamUrl = "https://inv.hostux.net/latest_version?id=$cleanId&itag=140"
-        val thumbnail = "https://img.youtube.com/vi/$cleanId/hqdefault.jpg"
+        // C. Direct audio stream endpoint via Invidious (itag 140 = M4A 128kbps audio stream)
+        val invidiousInstances = listOf(
+            "https://invidious.nerdvpn.de",
+            "https://inv.hostux.net",
+            "https://vid.puffyan.us"
+        )
+        for (host in invidiousInstances) {
+            val directAudioStreamUrl = "$host/latest_version?id=$cleanId&itag=140"
+            val thumbnail = "https://img.youtube.com/vi/$cleanId/hqdefault.jpg"
+            return StreamExtractionResult(
+                title = "YouTube Track ($cleanId)",
+                artist = "YouTube Audio",
+                durationMs = 0L,
+                artworkUrl = thumbnail,
+                streamUrl = directAudioStreamUrl,
+                format = "audio/m4a"
+            )
+        }
 
+        val thumbnail = "https://img.youtube.com/vi/$cleanId/hqdefault.jpg"
         return StreamExtractionResult(
             title = "YouTube Track ($cleanId)",
             artist = "YouTube Audio",
             durationMs = 0L,
             artworkUrl = thumbnail,
-            streamUrl = directAudioStreamUrl,
+            streamUrl = "https://inv.hostux.net/latest_version?id=$cleanId&itag=140",
             format = "audio/m4a"
         )
+    }
+
+    private fun tryExtractCobaltApi(videoId: String): StreamExtractionResult? {
+        val cleanId = extractVideoId(videoId) ?: videoId
+        val fullUrl = "https://www.youtube.com/watch?v=$cleanId"
+        val cobaltInstances = listOf(
+            "https://api.cobalt.tools/api/json",
+            "https://co.wuk.sh/api/json"
+        )
+        val mediaType = "application/json".toMediaTypeOrNull()
+        for (apiUrl in cobaltInstances) {
+            try {
+                val json = """{"url":"$fullUrl","downloadMode":"audio","audioFormat":"mp3"}"""
+                val body = json.toRequestBody(mediaType)
+                val req = Request.Builder()
+                    .url(apiUrl)
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "FloWave-Client/1.0")
+                    .post(body)
+                    .build()
+
+                client.newCall(req).execute().use { res ->
+                    val respStr = res.body?.string() ?: return@use
+                    val jsonObj = org.json.JSONObject(respStr)
+                    val status = jsonObj.optString("status")
+                    val streamUrl = jsonObj.optString("url")
+                    if ((status == "stream" || status == "redirect" || status == "picker") && streamUrl.isNotBlank()) {
+                        return StreamExtractionResult(
+                            title = "YouTube Audio ($cleanId)",
+                            artist = "YouTube",
+                            durationMs = 0L,
+                            artworkUrl = "https://img.youtube.com/vi/$cleanId/hqdefault.jpg",
+                            streamUrl = streamUrl,
+                            format = "audio/mp3"
+                        )
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+        return null
     }
 
     fun extractVideoId(urlOrId: String): String? {

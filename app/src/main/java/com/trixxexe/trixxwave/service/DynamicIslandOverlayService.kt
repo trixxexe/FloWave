@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import com.trixxexe.trixxwave.MainActivity
 import com.trixxexe.trixxwave.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -79,23 +80,32 @@ class DynamicIslandOverlayService : Service(), LifecycleOwner, ViewModelStoreOwn
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundNotification()
-        savedStateRegistryController.performRestore(null)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        try {
+            startForegroundNotification()
+            savedStateRegistryController.performRestore(null)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
-        if (!Settings.canDrawOverlays(this)) {
+            if (!Settings.canDrawOverlays(this)) {
+                stopSelf()
+                return
+            }
+
+            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            setupOverlayWindow()
+        } catch (e: Throwable) {
+            e.printStackTrace()
             stopSelf()
-            return
         }
-
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        setupOverlayWindow()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundNotification()
+        try {
+            startForegroundNotification()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
         return START_STICKY
     }
 
@@ -125,8 +135,12 @@ class DynamicIslandOverlayService : Service(), LifecycleOwner, ViewModelStoreOwn
                 .build()
 
             try {
-                startForeground(7771, notification)
-            } catch (e: Exception) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(7771, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                } else {
+                    startForeground(7771, notification)
+                }
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -216,16 +230,28 @@ class DynamicIslandOverlayService : Service(), LifecycleOwner, ViewModelStoreOwn
                             .widthIn(max = if (isExpanded) 330.dp else 220.dp)
                     ) {
                         if (!isExpanded) {
-                            // Collapsed Compact Notch Pill View
+                            // Collapsed Compact Notch Pill View - Album cover on one side, audio cover visualizer on other side (No texts)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.wrapContentWidth()
+                                modifier = Modifier
+                                    .wrapContentWidth()
+                                    .clickable {
+                                        try {
+                                            val launchIntent = Intent(this@DynamicIslandOverlayService, MainActivity::class.java).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                            }
+                                            startActivity(launchIntent)
+                                        } catch (e: Throwable) {
+                                            isExpanded = true
+                                        }
+                                    }
                             ) {
+                                // Left side: Album Cover
                                 if (artUri != null) {
                                     AsyncImage(
                                         model = artUri,
-                                        contentDescription = null,
+                                        contentDescription = "Album Cover",
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
                                             .size(22.dp)
@@ -236,61 +262,33 @@ class DynamicIslandOverlayService : Service(), LifecycleOwner, ViewModelStoreOwn
                                         modifier = Modifier
                                             .size(22.dp)
                                             .clip(CircleShape)
-                                            .background(accentColor.copy(alpha = 0.4f)),
+                                            .background(
+                                                Brush.linearGradient(
+                                                    colors = listOf(accentColor, Color(0xFFFF007A))
+                                                )
+                                            ),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("🎵", fontSize = 10.sp)
+                                        Icon(
+                                            imageVector = Icons.Default.MusicNote,
+                                            contentDescription = "Album Art",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(12.dp)
+                                        )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(16.dp))
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f, fill = false)
-                                ) {
-                                    Text(
-                                        text = title,
-                                        color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.widthIn(max = 85.dp)
-                                    )
-
-                                    Spacer(modifier = Modifier.width(6.dp))
-
-                                    CustomVisualizerView(
-                                        bands = bands,
-                                        waveform = waveform,
-                                        style = "Spectrum",
-                                        accentColor = accentColor,
-                                        height = 14.dp,
-                                        modifier = Modifier.width(28.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(6.dp))
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(CircleShape)
-                                        .background(accentColor)
-                                        .clickable {
-                                            sendBroadcast(Intent(TrixxWaveWidgetProvider.ACTION_WIDGET_PLAY_PAUSE).setPackage(packageName))
-                                            isPlaying = !isPlaying
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                        contentDescription = "Play/Pause",
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                }
+                                // Right side: Audio Cover / Animated Spectrum Visualizer (No text)
+                                CustomVisualizerView(
+                                    bands = bands,
+                                    waveform = waveform,
+                                    style = "Spectrum",
+                                    accentColor = accentColor,
+                                    height = 14.dp,
+                                    modifier = Modifier.width(30.dp)
+                                )
                             }
                         } else {
                             // Expanded Floating Notch Card View
@@ -432,7 +430,26 @@ class DynamicIslandOverlayService : Service(), LifecycleOwner, ViewModelStoreOwn
         }
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (_: Throwable) {}
+        try {
+            overlayView?.let {
+                windowManager?.removeView(it)
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+        overlayView = null
+        stopSelf()
+    }
+
     override fun onDestroy() {
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (_: Throwable) {}
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)

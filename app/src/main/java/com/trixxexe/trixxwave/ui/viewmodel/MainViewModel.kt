@@ -321,10 +321,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         notifyWidgetStateChanged()
 
         viewModelScope.launch(Dispatchers.IO) {
-            songDao.incrementPlayCount(song.id)
-            historyDao.insertEntry(PlayHistoryEntry(songId = song.id))
-            fetchLyricsForSong(song)
-            fetchAiInsightForSong(song)
+            try {
+                val existing = songDao.getSongById(song.id)
+                val targetSongId = if (existing == null) {
+                    songDao.insertSong(song)
+                } else {
+                    song.id
+                }
+                songDao.incrementPlayCount(targetSongId)
+                historyDao.insertEntry(PlayHistoryEntry(songId = targetSongId))
+                fetchLyricsForSong(song)
+                fetchAiInsightForSong(song)
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -352,12 +362,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleLikeSong(song: Song) {
         viewModelScope.launch(Dispatchers.IO) {
-            val newLiked = !song.isLiked
-            songDao.setLiked(song.id, newLiked)
-            if (_currentSong.value?.id == song.id) {
-                _currentSong.value = _currentSong.value?.copy(isLiked = newLiked)
+            try {
+                val newLiked = !song.isLiked
+                val existing = songDao.getSongById(song.id)
+                if (existing == null) {
+                    songDao.insertSong(song.copy(isLiked = newLiked))
+                } else {
+                    songDao.setLiked(song.id, newLiked)
+                }
+                if (_currentSong.value?.id == song.id) {
+                    _currentSong.value = _currentSong.value?.copy(isLiked = newLiked)
+                }
+                notifyWidgetStateChanged()
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
-            notifyWidgetStateChanged()
         }
     }
 

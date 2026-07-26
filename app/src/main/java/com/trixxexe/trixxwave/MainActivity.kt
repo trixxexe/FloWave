@@ -78,11 +78,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Safely bind PlaybackService
+        // Safely start & bind PlaybackService
         try {
             val serviceIntent = Intent(this, PlaybackService::class.java)
+            startService(serviceIntent)
             bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
 
@@ -112,19 +113,33 @@ class MainActivity : ComponentActivity() {
             var showOverlayPermissionDialog by remember { mutableStateOf(false) }
             val context = LocalContext.current
 
-            LaunchedEffect(themeConfig.dynamicIslandEnabled) {
-                try {
-                    if (themeConfig.dynamicIslandEnabled) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(context)) {
-                            DynamicIslandOverlayService.startService(context)
-                        } else {
-                            showOverlayPermissionDialog = true
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner, themeConfig.dynamicIslandEnabled) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    try {
+                        when (event) {
+                            androidx.lifecycle.Lifecycle.Event.ON_START,
+                            androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                                DynamicIslandOverlayService.stopService(context)
+                            }
+                            androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                                if (themeConfig.dynamicIslandEnabled) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(context)) {
+                                        DynamicIslandOverlayService.startService(context)
+                                    } else {
+                                        showOverlayPermissionDialog = true
+                                    }
+                                }
+                            }
+                            else -> {}
                         }
-                    } else {
-                        DynamicIslandOverlayService.stopService(context)
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
                 }
             }
 
@@ -500,9 +515,14 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (isBound) {
-            unbindService(connection)
-            isBound = false
+        try {
+            if (isBound) {
+                unbindService(connection)
+                isBound = false
+            }
+            DynamicIslandOverlayService.stopService(this)
+        } catch (e: Throwable) {
+            e.printStackTrace()
         }
         super.onDestroy()
     }
