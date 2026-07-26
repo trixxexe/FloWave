@@ -1,12 +1,22 @@
 package com.trixxexe.trixxwave.ui.viewmodel
 
 import android.app.Application
+import android.database.ContentObserver
+import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.trixxexe.trixxwave.TrixxWaveApp
 import com.trixxexe.trixxwave.data.api.AiRepository
+import com.trixxexe.trixxwave.data.api.AudiusRepository
+import com.trixxexe.trixxwave.data.api.LrclibRepository
 import com.trixxexe.trixxwave.data.api.LrclibService
 import com.trixxexe.trixxwave.data.api.OpenAiService
+import com.trixxexe.trixxwave.data.api.RadioRepository
+import com.trixxexe.trixxwave.data.api.YoutubeStreamRepository
 import com.trixxexe.trixxwave.data.db.*
 import com.trixxexe.trixxwave.data.preferences.AiConfig
 import com.trixxexe.trixxwave.data.preferences.EncryptedKeyManager
@@ -78,11 +88,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _gaplessState = MutableStateFlow(GaplessAnalysisState())
     val gaplessState: StateFlow<GaplessAnalysisState> = _gaplessState.asStateFlow()
 
+    // Hybrid Online Mode States
+    private val _isOnlineMode = MutableStateFlow(false)
+    val isOnlineMode: StateFlow<Boolean> = _isOnlineMode.asStateFlow()
+
+    private val _activeOnlineTab = MutableStateFlow("YOUTUBE") // "YOUTUBE", "AUDIUS", "RADIO"
+    val activeOnlineTab: StateFlow<String> = _activeOnlineTab.asStateFlow()
+
+    private val _youtubeSearchResults = MutableStateFlow<List<Song>>(emptyList())
+    val youtubeSearchResults: StateFlow<List<Song>> = _youtubeSearchResults.asStateFlow()
+
+    private val _audiusTrending = MutableStateFlow<List<Song>>(emptyList())
+    val audiusTrending: StateFlow<List<Song>> = _audiusTrending.asStateFlow()
+
+    private val _radioStations = MutableStateFlow<List<Song>>(emptyList())
+    val radioStations: StateFlow<List<Song>> = _radioStations.asStateFlow()
+
+    private val _isExtractingStream = MutableStateFlow(false)
+    val isExtractingStream: StateFlow<Boolean> = _isExtractingStream.asStateFlow()
+
+    private val _isOnlineSearchLoading = MutableStateFlow(false)
+    val isOnlineSearchLoading: StateFlow<Boolean> = _isOnlineSearchLoading.asStateFlow()
+
+    private val _onlineStreamError = MutableStateFlow<String?>(null)
+    val onlineStreamError: StateFlow<String?> = _onlineStreamError.asStateFlow()
+
     private val keyManager = EncryptedKeyManager(app)
     private val aiRepository = AiRepository(OpenAiService.create())
     private val lrclibService = LrclibService.create()
+    val lrclibRepo by lazy { LrclibRepository(lrclibService, lyricsDao) }
+
+    val youtubeRepo = YoutubeStreamRepository(app)
+    val radioRepo = RadioRepository()
+    val audiusRepo = AudiusRepository()
+
+    private var contentObserver: ContentObserver? = null
 
     init {
+        registerStorageObserver()
         // Auto-scan local audio on launch and run auto-tagger/waveform checks
         viewModelScope.launch(Dispatchers.IO) {
             MediaStoreScanner.scanDeviceAudio(app)
@@ -94,6 +137,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             allSongs.filter { it.isNotEmpty() }.first().let { songs ->
                 attemptAutoResume(songs)
             }
+        }
+    }
+
+    private fun registerStorageObserver() {
+        if (contentObserver != null) return
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                super.onChange(selfChange, uri)
+                viewModelScope.launch(Dispatchers.IO) {
+                    val added = MediaStoreScanner.scanDeviceAudio(app)
+                    if (added > 0) {
+                        autoTagAndProcessSongs()
+                    }
+                }
+            }
+        }
+        try {
+            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            } else {
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            }
+            app.contentResolver.registerContentObserver(uri, true, observer)
+            contentObserver = observer
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        contentObserver?.let {
+            try { app.contentResolver.unregisterContentObserver(it) } catch (e: Exception) {}
         }
     }
 
@@ -316,41 +392,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchLyricsForSong(song: Song) {
-        val cached = lyricsDao.getLyricsForSong(song.id)
-        if (cached != null) {
-            _currentLyrics.value = cached
-            return
-        }
-
-        try {
-            val response = lrclibService.getLyrics(
-                trackName = song.title,
-                artistName = song.artist,
-                albumName = song.album,
-                durationSeconds = (song.durationMs / 1000).toInt()
-            )
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
-                val lyrics = LyricsCache(
-                    songId = song.id,
-                    plainLyrics = body.plainLyrics,
-                    syncedLrc = body.syncedLyrics,
-                    source = "LRCLIB"
-                )
-                lyricsDao.insertLyrics(lyrics)
-                _currentLyrics.value = lyrics
-            }
-        } catch (e: Exception) {
-            _currentLyrics.value = null
+        val lyrics = lrclibRepo.getOrFetchLyrics(song)
+        _currentLyrics.value = lyrics
+        if (lyrics?.aiInsight != null) {
+            _aiTrackInsight.value = lyrics.aiInsight
         }
     }
 
     fun saveCorrectedLyrics(songId: Long, plainLyrics: String?, syncedLrc: String?) {
         viewModelScope.launch(Dispatchers.IO) {
+            val existing = lyricsDao.getLyricsForSong(songId)
             val updatedLyrics = LyricsCache(
                 songId = songId,
                 plainLyrics = plainLyrics?.ifBlank { null },
                 syncedLrc = syncedLrc?.ifBlank { null },
+                aiInsight = existing?.aiInsight,
                 source = "Manual Editor",
                 fetchedAt = System.currentTimeMillis()
             )
@@ -362,21 +418,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchAiInsightForSong(song: Song) {
+        val cached = lyricsDao.getLyricsForSong(song.id)
+        if (!cached?.aiInsight.isNullOrBlank()) {
+            _aiTrackInsight.value = cached!!.aiInsight
+            return
+        }
+
         val aiConfig = keyManager.getAiConfig()
         if (aiConfig.apiKey.isNotBlank() && aiConfig.trackInsightsEnabled) {
-            val insight = aiRepository.generateTrackInsights(aiConfig, song.title, song.artist, song.album)
-            _aiTrackInsight.value = insight
+            try {
+                val insight = aiRepository.generateTrackInsights(aiConfig, song.title, song.artist, song.album)
+                _aiTrackInsight.value = insight
+                val existing = cached ?: LyricsCache(songId = song.id)
+                lyricsDao.insertLyrics(existing.copy(aiInsight = insight))
+            } catch (e: Exception) {
+                if (!cached?.aiInsight.isNullOrBlank()) {
+                    _aiTrackInsight.value = cached!!.aiInsight
+                } else {
+                    _aiTrackInsight.value = "Unable to fetch online insights: ${e.localizedMessage}. Check network connection or API Key."
+                }
+            }
         } else {
-            _aiTrackInsight.value = "AI Track Insights available when API Key is configured in Settings."
+            if (!cached?.aiInsight.isNullOrBlank()) {
+                _aiTrackInsight.value = cached!!.aiInsight
+            } else {
+                _aiTrackInsight.value = "AI Track Insights available when API Key is configured in Settings."
+            }
         }
     }
 
     fun generateSmartMix(prompt: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            val songsList = allSongs.value
             val aiConfig = keyManager.getAiConfig()
-            val availableTitles = allSongs.value.map { it.title }
+            val availableTitles = songsList.map { it.title }
             val selectedTitles = aiRepository.selectSmartMixSongs(aiConfig, prompt, availableTitles)
-            val matchedSongs = allSongs.value.filter { it.title in selectedTitles }
+            var matchedSongs = songsList.filter { it.title in selectedTitles }
+
+            if (matchedSongs.isEmpty() && songsList.isNotEmpty()) {
+                // Smart fallback: search by prompt keywords or pick top songs
+                val promptWords = prompt.lowercase().split(" ").filter { it.length > 2 }
+                val keywordMatches = songsList.filter { song ->
+                    promptWords.any { word ->
+                        song.title.lowercase().contains(word) ||
+                        song.artist.lowercase().contains(word) ||
+                        song.genre?.lowercase()?.contains(word) == true ||
+                        song.moodTags?.lowercase()?.contains(word) == true
+                    }
+                }
+                matchedSongs = if (keywordMatches.isNotEmpty()) keywordMatches else songsList.shuffled().take(8)
+            }
 
             val newPlaylist = Playlist(
                 name = "Smart Mix: $prompt",
@@ -389,6 +480,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     PlaylistSongCrossRef(playlistId = plId, songId = song.id, position = index)
                 )
             }
+        }
+    }
+
+    fun getSongsForPlaylist(playlistId: Long): Flow<List<Song>> = playlistDao.getSongsForPlaylist(playlistId)
+
+    fun playPlaylist(songs: List<Song>, startIndex: Int = 0) {
+        if (songs.isEmpty()) return
+        val target = songs.getOrNull(startIndex) ?: songs.first()
+        _playbackQueue.value = songs
+        playSong(target)
+    }
+
+    fun deletePlaylist(playlist: Playlist) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playlistDao.deletePlaylist(playlist)
+        }
+    }
+
+    fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playlistDao.removeSongFromPlaylist(playlistId, songId)
         }
     }
 
@@ -408,6 +520,108 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearRecentSearches() {
         viewModelScope.launch(Dispatchers.IO) {
             recentSearchDao.clearRecentSearches()
+        }
+    }
+
+    // --- Hybrid Online Mode Functions ---
+    fun toggleOnlineMode(online: Boolean) {
+        _isOnlineMode.value = online
+        if (online) {
+            when (_activeOnlineTab.value) {
+                "AUDIUS" -> if (_audiusTrending.value.isEmpty()) fetchAudiusTrending()
+                "RADIO" -> if (_radioStations.value.isEmpty()) fetchRadioStations()
+            }
+        }
+    }
+
+    fun setOnlineTab(tab: String) {
+        _activeOnlineTab.value = tab
+        when (tab) {
+            "AUDIUS" -> if (_audiusTrending.value.isEmpty()) fetchAudiusTrending()
+            "RADIO" -> if (_radioStations.value.isEmpty()) fetchRadioStations()
+        }
+    }
+
+    fun searchYoutube(query: String) {
+        if (query.isBlank()) return
+        viewModelScope.launch {
+            _isOnlineSearchLoading.value = true
+            _onlineStreamError.value = null
+            val results = youtubeRepo.searchYoutube(query)
+            _youtubeSearchResults.value = results
+            _isOnlineSearchLoading.value = false
+        }
+    }
+
+    fun extractAndPlayYoutubeUrl(urlOrQuery: String) {
+        if (urlOrQuery.isBlank()) return
+        viewModelScope.launch {
+            _isExtractingStream.value = true
+            _onlineStreamError.value = null
+
+            val videoId = youtubeRepo.extractVideoId(urlOrQuery)
+            if (videoId == null && !urlOrQuery.startsWith("http")) {
+                searchYoutube(urlOrQuery)
+                _isExtractingStream.value = false
+                return@launch
+            }
+
+            val result = youtubeRepo.extractAudioStream(urlOrQuery)
+            _isExtractingStream.value = false
+
+            if (result != null) {
+                val song = Song(
+                    id = System.currentTimeMillis(),
+                    title = result.title,
+                    artist = result.artist,
+                    album = "YouTube Direct",
+                    durationMs = result.durationMs,
+                    filePath = urlOrQuery,
+                    albumArtUri = result.artworkUrl,
+                    genre = "YouTube Stream",
+                    source = "YOUTUBE_EXTRACTED",
+                    streamUrl = result.streamUrl,
+                    originalUrl = urlOrQuery
+                )
+                playSong(song, listOf(song))
+            } else {
+                _onlineStreamError.value = "Failed to extract audio stream for link."
+            }
+        }
+    }
+
+    fun fetchAudiusTrending() {
+        viewModelScope.launch {
+            _isOnlineSearchLoading.value = true
+            val tracks = audiusRepo.getTrendingTracks()
+            _audiusTrending.value = tracks
+            _isOnlineSearchLoading.value = false
+        }
+    }
+
+    fun searchAudius(query: String) {
+        viewModelScope.launch {
+            _isOnlineSearchLoading.value = true
+            val tracks = audiusRepo.searchTracks(query)
+            _audiusTrending.value = tracks
+            _isOnlineSearchLoading.value = false
+        }
+    }
+
+    fun fetchRadioStations(query: String = "") {
+        viewModelScope.launch {
+            _isOnlineSearchLoading.value = true
+            val stations = radioRepo.searchStations(query)
+            _radioStations.value = stations
+            _isOnlineSearchLoading.value = false
+        }
+    }
+
+    fun playOnlineTrack(song: Song) {
+        if (song.source == "YOUTUBE_EXTRACTED" && song.streamUrl.isNullOrBlank()) {
+            extractAndPlayYoutubeUrl(song.originalUrl ?: song.filePath)
+        } else {
+            playSong(song, listOf(song))
         }
     }
 }

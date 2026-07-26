@@ -194,15 +194,18 @@ fun ProfileSwitcherScreen(
                     Text("Tap circle to upload, or pick a preset below:", color = Color(0xFF94A3B8), fontSize = 11.sp)
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val packageName = context.packageName
+
                     val presetAvatars = listOf(
-                        "Male 1" to "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=400&q=80",
-                        "Male 2" to "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=400&q=80",
-                        "Female 1" to "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=400&q=80",
-                        "Female 2" to "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80",
-                        "Dog" to "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=400&q=80",
-                        "Cat" to "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=400&q=80",
-                        "Elephant" to "https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?auto=format&fit=crop&w=400&q=80",
-                        "Monkey" to "https://images.unsplash.com/photo-1540573133985-780688d172e2?auto=format&fit=crop&w=400&q=80"
+                        "Cyber Girl" to "android.resource://$packageName/drawable/ic_avatar_anime_1",
+                        "Wave Boy" to "android.resource://$packageName/drawable/ic_avatar_anime_2",
+                        "Gold Star" to "android.resource://$packageName/drawable/ic_avatar_anime_3",
+                        "Mint Cyber" to "android.resource://$packageName/drawable/ic_avatar_anime_4",
+                        "Synth Vocal" to "android.resource://$packageName/drawable/ic_avatar_anime_5",
+                        "Cat Pink" to "android.resource://$packageName/drawable/ic_avatar_anime_6",
+                        "Hoodie Lofi" to "android.resource://$packageName/drawable/ic_avatar_anime_7",
+                        "Acoustic Sun" to "android.resource://$packageName/drawable/ic_avatar_anime_8"
                     )
 
                     androidx.compose.foundation.lazy.LazyRow(

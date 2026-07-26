@@ -47,8 +47,108 @@ import com.trixxexe.trixxwave.data.preferences.AiConfig
 import com.trixxexe.trixxwave.data.preferences.ThemeConfig
 import com.trixxexe.trixxwave.ui.components.glass.CustomVisualizerView
 import com.trixxexe.trixxwave.ui.components.glass.LiquidGlassCard
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.input.VisualTransformation
 import com.trixxexe.trixxwave.ui.components.glass.getThemeAccentColor
 import com.trixxexe.trixxwave.ui.viewmodel.GaplessAnalysisState
+
+data class AiProviderOption(
+    val id: String,
+    val displayName: String,
+    val defaultEndpoint: String,
+    val defaultModel: String,
+    val popularModels: List<String>
+)
+
+val WELL_KNOWN_AI_PROVIDERS = listOf(
+    AiProviderOption(
+        id = "Groq",
+        displayName = "Groq (Ultra-Fast LPUs)",
+        defaultEndpoint = "https://api.groq.com/openai/v1/",
+        defaultModel = "llama-3.3-70b-versatile",
+        popularModels = listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "mixtral-8x7b-32768", "gemma2-9b-it")
+    ),
+    AiProviderOption(
+        id = "Google Gemini",
+        displayName = "Google Gemini API",
+        defaultEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/",
+        defaultModel = "gemini-2.5-flash",
+        popularModels = listOf("gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro")
+    ),
+    AiProviderOption(
+        id = "OpenAI",
+        displayName = "OpenAI (GPT-4o)",
+        defaultEndpoint = "https://api.openai.com/v1/",
+        defaultModel = "gpt-4o-mini",
+        popularModels = listOf("gpt-4o", "gpt-4o-mini", "o3-mini", "gpt-4-turbo", "gpt-3.5-turbo")
+    ),
+    AiProviderOption(
+        id = "OpenRouter",
+        displayName = "OpenRouter (Unified Gateway)",
+        defaultEndpoint = "https://openrouter.ai/api/v1/",
+        defaultModel = "google/gemini-2.5-flash",
+        popularModels = listOf("google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct", "anthropic/claude-3.5-sonnet", "deepseek/deepseek-chat", "qwen/qwen-2.5-72b-instruct")
+    ),
+    AiProviderOption(
+        id = "NVIDIA NIM",
+        displayName = "NVIDIA NIM Cloud",
+        defaultEndpoint = "https://integrate.api.nvidia.com/v1/",
+        defaultModel = "meta/llama-3.3-70b-instruct",
+        popularModels = listOf("meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "deepseek-ai/deepseek-r1", "mistralai/mistral-large-2-instruct")
+    ),
+    AiProviderOption(
+        id = "Anthropic Claude",
+        displayName = "Anthropic Claude (via OpenRouter)",
+        defaultEndpoint = "https://openrouter.ai/api/v1/",
+        defaultModel = "anthropic/claude-3.5-sonnet",
+        popularModels = listOf("anthropic/claude-3.5-sonnet", "anthropic/claude-3.5-haiku", "anthropic/claude-3-opus")
+    ),
+    AiProviderOption(
+        id = "Together AI",
+        displayName = "Together AI Engine",
+        defaultEndpoint = "https://api.together.xyz/v1/",
+        defaultModel = "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        popularModels = listOf("meta-llama/Llama-3.3-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1", "Qwen/Qwen2.5-72B-Instruct-Turbo")
+    ),
+    AiProviderOption(
+        id = "DeepSeek",
+        displayName = "DeepSeek AI Direct",
+        defaultEndpoint = "https://api.deepseek.com/v1/",
+        defaultModel = "deepseek-chat",
+        popularModels = listOf("deepseek-chat", "deepseek-reasoner")
+    ),
+    AiProviderOption(
+        id = "Mistral AI",
+        displayName = "Mistral AI Platform",
+        defaultEndpoint = "https://api.mistral.ai/v1/",
+        defaultModel = "mistral-small-latest",
+        popularModels = listOf("mistral-small-latest", "mistral-large-latest", "pixtral-12b-2409", "open-mistral-nemo")
+    ),
+    AiProviderOption(
+        id = "Fireworks AI",
+        displayName = "Fireworks AI Platform",
+        defaultEndpoint = "https://api.fireworks.ai/inference/v1/",
+        defaultModel = "accounts/fireworks/models/llama-v3p3-70b-instruct",
+        popularModels = listOf("accounts/fireworks/models/llama-v3p3-70b-instruct", "accounts/fireworks/models/deepseek-r1", "accounts/fireworks/models/qwen2p5-coder-32b-instruct")
+    ),
+    AiProviderOption(
+        id = "Cohere",
+        displayName = "Cohere Command Models",
+        defaultEndpoint = "https://api.cohere.com/v2/",
+        defaultModel = "command-r-plus",
+        popularModels = listOf("command-r-plus", "command-r")
+    ),
+    AiProviderOption(
+        id = "Custom Endpoint",
+        displayName = "Custom Endpoint (Ollama / LocalLM)",
+        defaultEndpoint = "http://localhost:11434/v1/",
+        defaultModel = "llama3.2",
+        popularModels = listOf("llama3.2", "qwen2.5", "mistral", "deepseek-r1")
+    )
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +156,10 @@ fun SettingsScreen(
     themeConfig: ThemeConfig,
     aiConfig: AiConfig,
     testStatus: String?,
+    fetchedModels: List<String> = emptyList(),
+    isFetchingModels: Boolean = false,
+    fetchModelsStatus: String? = null,
+    onFetchModels: ((provider: String, apiKey: String, customEndpoint: String) -> Unit)? = null,
     onSaveAiConfig: (AiConfig) -> Unit,
     onTestAiConnection: () -> Unit,
     onSelectPreset: (String) -> Unit,
@@ -87,6 +191,25 @@ fun SettingsScreen(
     var apiKey by remember(aiConfig) { mutableStateOf(aiConfig.apiKey) }
     var provider by remember(aiConfig) { mutableStateOf(aiConfig.provider) }
     var modelName by remember(aiConfig) { mutableStateOf(aiConfig.modelName) }
+    var customEndpoint by remember(aiConfig) { mutableStateOf(aiConfig.customEndpoint) }
+
+    var providerMenuExpanded by remember { mutableStateOf(false) }
+    var modelMenuExpanded by remember { mutableStateOf(false) }
+    var isApiKeyVisible by remember { mutableStateOf(false) }
+    var showAdvancedEndpoint by remember { mutableStateOf(false) }
+
+    val activeProviderInfo = remember(provider) {
+        WELL_KNOWN_AI_PROVIDERS.find { it.id.equals(provider, ignoreCase = true) || it.displayName.equals(provider, ignoreCase = true) }
+            ?: WELL_KNOWN_AI_PROVIDERS.first()
+    }
+
+    val currentAvailableModels = remember(activeProviderInfo, fetchedModels) {
+        if (fetchedModels.isNotEmpty()) {
+            fetchedModels
+        } else {
+            activeProviderInfo.popularModels
+        }
+    }
 
     var customPrimaryHexInput by remember(themeConfig.primaryColorHex) { mutableStateOf(themeConfig.primaryColorHex) }
     var customAccentHexInput by remember(themeConfig.accentColorHex) { mutableStateOf(themeConfig.accentColorHex) }
@@ -1274,54 +1397,214 @@ fun SettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.Default.Psychology, contentDescription = "AI", tint = accentColor)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("LLM API Settings (Groq / NVIDIA NIM / Custom)", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("LLM API & Provider Settings", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+
+                    Text(
+                        "Select an AI Inference provider or custom endpoint to power track insights, mood tags, and smart playlist generation.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+
+                    // 1. Provider Dropdown Menu
+                    Text("AI Provider", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    ExposedDropdownMenuBox(
+                        expanded = providerMenuExpanded,
+                        onExpandedChange = { providerMenuExpanded = !providerMenuExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = provider,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Provider (10+ Top AI Services)") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = providerMenuExpanded) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = accentColor,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedLabelColor = accentColor,
+                                unfocusedLabelColor = Color.White.copy(alpha = 0.6f)
+                            ),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("ai_provider_input")
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = providerMenuExpanded,
+                            onDismissRequest = { providerMenuExpanded = false },
+                            modifier = Modifier.background(Color(0xFF1E1E2C))
+                        ) {
+                            WELL_KNOWN_AI_PROVIDERS.forEach { opt ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(opt.displayName, color = Color.White, fontWeight = FontWeight.Bold)
+                                            Text(opt.defaultEndpoint, color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                                        }
+                                    },
+                                    onClick = {
+                                        provider = opt.id
+                                        customEndpoint = opt.defaultEndpoint
+                                        modelName = opt.defaultModel
+                                        providerMenuExpanded = false
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    OutlinedTextField(
-                        value = provider,
-                        onValueChange = { provider = it },
-                        label = { Text("Provider (e.g. 'Groq' or 'NVIDIA NIM')") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = accentColor,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        modifier = Modifier.fillMaxWidth().testTag("ai_provider_input")
-                    )
+                    // 2. Model Selection Dropdown & Fetch Button
+                    Text("Selected Model", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ExposedDropdownMenuBox(
+                            expanded = modelMenuExpanded,
+                            onExpandedChange = { modelMenuExpanded = !modelMenuExpanded },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            OutlinedTextField(
+                                value = modelName,
+                                onValueChange = { modelName = it },
+                                label = { Text("Model Name") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = accentColor,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedLabelColor = accentColor,
+                                    unfocusedLabelColor = Color.White.copy(alpha = 0.6f)
+                                ),
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                                    .testTag("ai_model_input")
+                            )
 
-                    OutlinedTextField(
-                        value = modelName,
-                        onValueChange = { modelName = it },
-                        label = { Text("Model Name (e.g. 'llama3-8b-8192')") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = accentColor,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        modifier = Modifier.fillMaxWidth().testTag("ai_model_input")
-                    )
+                            ExposedDropdownMenu(
+                                expanded = modelMenuExpanded,
+                                onDismissRequest = { modelMenuExpanded = false },
+                                modifier = Modifier.background(Color(0xFF1E1E2C))
+                            ) {
+                                currentAvailableModels.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = { Text(model, color = Color.White) },
+                                        onClick = {
+                                            modelName = model
+                                            modelMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        // Fetch Models Button
+                        IconButton(
+                            onClick = {
+                                onFetchModels?.invoke(provider, apiKey, customEndpoint)
+                            },
+                            enabled = !isFetchingModels,
+                            modifier = Modifier
+                                .background(accentColor.copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp))
+                                .border(1.dp, accentColor.copy(alpha = 0.5f), shape = RoundedCornerShape(12.dp))
+                                .size(54.dp)
+                                .testTag("fetch_models_button")
+                        ) {
+                            if (isFetchingModels) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = accentColor,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Fetch Available Models from API",
+                                    tint = accentColor
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 3. API Key Field
+                    Text("API Key", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     OutlinedTextField(
                         value = apiKey,
                         onValueChange = { apiKey = it },
                         label = { Text("API Key (EncryptedSharedPreferences)") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (isApiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
+                                Icon(
+                                    imageVector = if (isApiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = "Toggle API Key Visibility",
+                                    tint = Color.White.copy(alpha = 0.7f)
+                                )
+                            }
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = accentColor,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = accentColor,
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.6f)
                         ),
                         modifier = Modifier.fillMaxWidth().testTag("ai_key_input")
                     )
 
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Advanced Custom Endpoint Toggle
+                    TextButton(
+                        onClick = { showAdvancedEndpoint = !showAdvancedEndpoint },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(
+                            text = if (showAdvancedEndpoint) "Hide Endpoint Settings" else "Show Custom Endpoint URL",
+                            color = accentColor.copy(alpha = 0.8f),
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    if (showAdvancedEndpoint) {
+                        OutlinedTextField(
+                            value = customEndpoint,
+                            onValueChange = { customEndpoint = it },
+                            label = { Text("Custom Base Endpoint URL") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = accentColor,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            modifier = Modifier.fillMaxWidth().testTag("ai_custom_endpoint_input")
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // 4. Action Buttons (Save Key & Test API)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -1332,7 +1615,8 @@ fun SettingsScreen(
                                     AiConfig(
                                         provider = provider,
                                         modelName = modelName,
-                                        apiKey = apiKey
+                                        apiKey = apiKey,
+                                        customEndpoint = customEndpoint
                                     )
                                 )
                             },
@@ -1345,19 +1629,73 @@ fun SettingsScreen(
                         OutlinedButton(
                             onClick = onTestAiConnection,
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = accentColor),
+                            border = BorderStroke(1.dp, accentColor),
                             modifier = Modifier.weight(1f).testTag("test_ai_button")
                         ) {
-                            Text("Test API")
+                            Text("Test API", fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    if (testStatus != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = testStatus,
-                            color = if (testStatus.contains("Success")) accentColor else Color(0xFFFF007A),
-                            fontSize = 12.sp
-                        )
+                    // 5. Model Fetch Status Display
+                    if (!fetchModelsStatus.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val isError = fetchModelsStatus.contains("Error") || fetchModelsStatus.contains("HTTP") || fetchModelsStatus.contains("Failed") || fetchModelsStatus.contains("Network")
+                        Surface(
+                            color = if (isError) Color(0x22FF0055) else Color(0x2200F5D4),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, if (isError) Color(0xFFFF0055) else Color(0x8800F5D4)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isError) Icons.Default.Error else Icons.Default.CheckCircle,
+                                    contentDescription = "Status",
+                                    tint = if (isError) Color(0xFFFF4477) else Color(0xFF00F5D4),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = fetchModelsStatus,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    // 6. Test API Status Display
+                    if (!testStatus.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val isSuccess = testStatus.contains("Success") || testStatus.contains("Connected")
+                        Surface(
+                            color = if (isSuccess) Color(0x2200F5D4) else Color(0x22FF0055),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, if (isSuccess) Color(0x8800F5D4) else Color(0xFFFF0055)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                                    contentDescription = "Test Result",
+                                    tint = if (isSuccess) Color(0xFF00F5D4) else Color(0xFFFF4477),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = testStatus,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }

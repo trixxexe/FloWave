@@ -27,21 +27,25 @@ class TrixxWaveApp : Application() {
     }
 
     private fun scheduleLyricsCleanup() {
-        val constraints = Constraints.Builder()
-            .setRequiresBatteryNotLow(true)
-            .build()
+        try {
+            val constraints = Constraints.Builder()
+                .setRequiresBatteryNotLow(true)
+                .build()
 
-        val cleanupWorkRequest = PeriodicWorkRequestBuilder<LyricsCleanupWorker>(
-            24, TimeUnit.HOURS
-        )
-            .setConstraints(constraints)
-            .build()
+            val cleanupWorkRequest = PeriodicWorkRequestBuilder<LyricsCleanupWorker>(
+                24, TimeUnit.HOURS
+            )
+                .setConstraints(constraints)
+                .build()
 
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            LyricsCleanupWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            cleanupWorkRequest
-        )
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                LyricsCleanupWorker.WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                cleanupWorkRequest
+            )
+        } catch (_: Exception) {
+            // WorkManager initialization safety fallback
+        }
     }
 
     companion object {

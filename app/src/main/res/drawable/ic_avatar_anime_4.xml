@@ -1,0 +1,43 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M60,0 A60,60 0 1,1 60,120 A60,60 0 1,1 60,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="120"
+                android:endY="120"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF00FF87"/>
+                <item android:offset="1.0" android:color="#FF60EFFF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Hair -->
+    <path
+        android:fillColor="#FF004D40"
+        android:pathData="M30,30 C30,15 90,15 90,30 L95,65 L80,60 L75,35 L45,35 L40,60 L25,65 Z"/>
+    <!-- Face -->
+    <path
+        android:fillColor="#FFFFF0E8"
+        android:pathData="M42,35 C42,25 78,25 78,35 C78,60 70,74 60,74 C50,74 42,60 42,35 Z"/>
+    <!-- Mask -->
+    <path
+        android:fillColor="#FF00E676"
+        android:pathData="M44,52 L76,52 L72,70 C66,74 54,74 48,70 Z"/>
+    <path
+        android:fillColor="#FF004D40"
+        android:pathData="M56,58 L64,58 L64,64 L56,64 Z"/>
+    <!-- Eyes -->
+    <path
+        android:fillColor="#FF004D40"
+        android:pathData="M44.5,44 A3.5,5 0 1,1 51.5,44 A3.5,5 0 1,1 44.5,44 Z M68.5,44 A3.5,5 0 1,1 75.5,44 A3.5,5 0 1,1 68.5,44 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M47.5,42 A1.5,1.5 0 1,1 50.5,42 A1.5,1.5 0 1,1 47.5,42 Z M71.5,42 A1.5,1.5 0 1,1 74.5,42 A1.5,1.5 0 1,1 71.5,42 Z"/>
+</vector>

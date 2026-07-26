@@ -33,6 +33,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _testStatus = MutableStateFlow<String?>(null)
     val testStatus: StateFlow<String?> = _testStatus.asStateFlow()
 
+    private val _fetchedModels = MutableStateFlow<List<String>>(emptyList())
+    val fetchedModels: StateFlow<List<String>> = _fetchedModels.asStateFlow()
+
+    private val _isFetchingModels = MutableStateFlow(false)
+    val isFetchingModels: StateFlow<Boolean> = _isFetchingModels.asStateFlow()
+
+    private val _fetchModelsStatus = MutableStateFlow<String?>(null)
+    val fetchModelsStatus: StateFlow<String?> = _fetchModelsStatus.asStateFlow()
+
     val profiles: StateFlow<List<Profile>> = profileDao.getAllProfiles()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -42,6 +51,27 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun saveAiConfig(config: AiConfig) {
         keyManager.saveAiConfig(config)
         _aiConfig.value = config
+    }
+
+    fun fetchAvailableModels(provider: String, apiKey: String, customEndpoint: String) {
+        val tempConfig = _aiConfig.value.copy(
+            provider = provider,
+            apiKey = apiKey,
+            customEndpoint = customEndpoint
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            _isFetchingModels.value = true
+            _fetchModelsStatus.value = "Connecting to $provider models endpoint..."
+            val result = aiRepository.fetchAvailableModels(tempConfig)
+            result.onSuccess { models ->
+                _fetchedModels.value = models
+                _isFetchingModels.value = false
+                _fetchModelsStatus.value = "Fetched ${models.size} models successfully!"
+            }.onFailure { err ->
+                _isFetchingModels.value = false
+                _fetchModelsStatus.value = err.localizedMessage ?: "Failed to fetch models"
+            }
+        }
     }
 
     fun setFirstRunCompleted(completed: Boolean) {

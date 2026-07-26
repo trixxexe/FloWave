@@ -8,10 +8,21 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Url
 import java.util.concurrent.TimeUnit
+
+@JsonClass(generateAdapter = true)
+data class ModelItem(
+    val id: String
+)
+
+@JsonClass(generateAdapter = true)
+data class ModelsResponse(
+    val data: List<ModelItem>?
+)
 
 @JsonClass(generateAdapter = true)
 data class ChatMessage(
@@ -39,6 +50,12 @@ data class ChatCompletionResponse(
 )
 
 interface OpenAiService {
+    @GET
+    suspend fun getModels(
+        @Url url: String,
+        @Header("Authorization") authorization: String
+    ): Response<ModelsResponse>
+
     @POST
     suspend fun createChatCompletion(
         @Url url: String,

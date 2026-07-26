@@ -1,21 +1,30 @@
 package com.trixxexe.trixxwave.ui.components.glass
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -76,7 +85,8 @@ fun SyncedLyricsView(
 
             LaunchedEffect(currentActiveIndex) {
                 coroutineScope.launch {
-                    listState.animateScrollToItem((currentActiveIndex - 2).coerceAtLeast(0))
+                    val targetIndex = (currentActiveIndex - 2).coerceAtLeast(0)
+                    listState.animateScrollToItem(targetIndex)
                 }
             }
 
@@ -85,22 +95,88 @@ fun SyncedLyricsView(
                 modifier = Modifier
                     .testTag("synced_lyrics_view")
                     .fillMaxSize(),
-                contentPadding = PaddingValues(top = 50.dp, bottom = 120.dp),
+                contentPadding = PaddingValues(top = 60.dp, bottom = 140.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 itemsIndexed(lrcLines) { idx, line ->
                     val isActive = idx == currentActiveIndex
-                    Text(
-                        text = line.text,
-                        color = if (isActive) Color(0xFFF27D26) else Color(0x99FFFFFF),
-                        fontSize = if (isActive) 22.sp else 16.sp,
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                        textAlign = TextAlign.Center,
+
+                    val lineScale by animateFloatAsState(
+                        targetValue = if (isActive) 1.06f else 0.95f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessLow
+                        ),
+                        label = "lyrics_scale"
+                    )
+
+                    val textAlpha by animateFloatAsState(
+                        targetValue = if (isActive) 1.0f else 0.5f,
+                        animationSpec = tween(durationMillis = 300),
+                        label = "lyrics_alpha"
+                    )
+
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp, horizontal = 16.dp)
+                            .padding(vertical = 4.dp, horizontal = 12.dp)
+                            .scale(lineScale)
+                            .clip(RoundedCornerShape(16.dp))
+                            .then(
+                                if (isActive) {
+                                    Modifier
+                                        .drawBehind {
+                                            drawCircle(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0x66F27D26),
+                                                        Color(0x2200F5D4),
+                                                        Color.Transparent
+                                                    )
+                                                ),
+                                                radius = size.width * 0.6f
+                                            )
+                                        }
+                                        .background(
+                                            brush = Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    Color(0x33F27D26),
+                                                    Color(0x441E1E2C),
+                                                    Color(0x3300F5D4)
+                                                )
+                                            ),
+                                            shape = RoundedCornerShape(16.dp)
+                                        )
+                                        .border(
+                                            border = BorderStroke(
+                                                1.dp,
+                                                Brush.horizontalGradient(
+                                                    colors = listOf(
+                                                        Color(0xAAF27D26),
+                                                        Color(0xCC00F5D4),
+                                                        Color(0xAAF27D26)
+                                                    )
+                                                )
+                                            ),
+                                            shape = RoundedCornerShape(16.dp)
+                                        )
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .clickable { onSeekToTimestamp(line.timestampMs) }
-                    )
+                            .padding(vertical = 10.dp, horizontal = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = line.text,
+                            color = if (isActive) Color.White else Color.White.copy(alpha = textAlpha),
+                            fontSize = if (isActive) 21.sp else 16.sp,
+                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         } else if (!plainLyrics.isNullOrBlank()) {

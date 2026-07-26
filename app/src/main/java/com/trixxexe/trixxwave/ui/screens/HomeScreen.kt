@@ -35,7 +35,11 @@ import com.trixxexe.trixxwave.data.db.Playlist
 import com.trixxexe.trixxwave.data.db.Profile
 import com.trixxexe.trixxwave.data.db.Song
 import com.trixxexe.trixxwave.data.preferences.ThemeConfig
+import com.trixxexe.trixxwave.ui.components.glass.HybridModeToggleBar
 import com.trixxexe.trixxwave.ui.components.glass.LiquidGlassCard
+
+import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.ui.graphics.Brush
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,7 +50,23 @@ fun HomeScreen(
     likedSongs: List<Song>,
     allSongs: List<Song>,
     playlists: List<Playlist>,
+    isOnlineMode: Boolean = false,
+    activeOnlineTab: String = "YOUTUBE",
+    youtubeResults: List<Song> = emptyList(),
+    audiusTracks: List<Song> = emptyList(),
+    radioStations: List<Song> = emptyList(),
+    isExtractingStream: Boolean = false,
+    isOnlineSearchLoading: Boolean = false,
+    onlineStreamError: String? = null,
+    onToggleOnlineMode: (Boolean) -> Unit = {},
+    onSelectOnlineTab: (String) -> Unit = {},
+    onExtractYoutubeUrl: (String) -> Unit = {},
+    onSearchYoutube: (String) -> Unit = {},
+    onSearchAudius: (String) -> Unit = {},
+    onSearchRadio: (String) -> Unit = {},
+    onPlayOnlineTrack: (Song) -> Unit = {},
     onSongClick: (Song) -> Unit,
+    onPlaylistClick: (Playlist) -> Unit = {},
     onGenerateSmartMix: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToProfiles: () -> Unit,
@@ -70,89 +90,118 @@ fun HomeScreen(
     }
     val greeting = remember { dynamicGreetings.random() }
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .testTag("home_screen")
-            .fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 120.dp)
+            .fillMaxSize()
     ) {
         // Top Bar Header
-        item {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable(onClick = onNavigateToProfiles)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable(onClick = onNavigateToProfiles)
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E2238))
+                        .border(1.5.dp, accentColor, CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1E2238))
-                            .border(1.5.dp, accentColor, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!activeProfile?.avatarUri.isNullOrBlank()) {
-                            AsyncImage(
-                                model = activeProfile?.avatarUri,
-                                contentDescription = "Profile",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Profile",
-                                tint = accentColor,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column {
-                        Text(
-                            text = greeting,
-                            color = Color(0xFF94A3B8),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
+                    if (!activeProfile?.avatarUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = activeProfile?.avatarUri,
+                            contentDescription = "Profile",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
-                        Text(
-                            text = activeProfile?.name ?: "Main Listener",
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = (-0.5).sp
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Profile",
+                            tint = accentColor,
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = greeting,
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = activeProfile?.name ?: "Main Listener",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-0.5).sp
+                    )
+                }
+            }
 
-                Row {
-                    IconButton(onClick = onNavigateToEqualizer) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                            contentDescription = "Equalizer",
-                            tint = accentColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    IconButton(
-                        onClick = onNavigateToSettings,
-                        modifier = Modifier.testTag("home_settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = Color.White
-                        )
-                    }
+            Row {
+                IconButton(onClick = onNavigateToEqualizer) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        contentDescription = "Equalizer",
+                        tint = accentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                IconButton(
+                    onClick = onNavigateToSettings,
+                    modifier = Modifier.testTag("home_settings_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color.White
+                    )
                 }
             }
         }
+
+        // Liquid Glass Hybrid Mode Toggle Bar (Offline Mode vs Online Mode)
+        HybridModeToggleBar(
+            isOnlineMode = isOnlineMode,
+            themeConfig = themeConfig,
+            onModeToggle = onToggleOnlineMode
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        if (isOnlineMode) {
+            OnlineStreamingScreen(
+                themeConfig = themeConfig,
+                activeTab = activeOnlineTab,
+                youtubeResults = youtubeResults,
+                audiusTracks = audiusTracks,
+                radioStations = radioStations,
+                isExtractingStream = isExtractingStream,
+                isLoading = isOnlineSearchLoading,
+                errorMessage = onlineStreamError,
+                onTabSelected = onSelectOnlineTab,
+                onExtractYoutubeUrl = onExtractYoutubeUrl,
+                onSearchYoutube = onSearchYoutube,
+                onSearchAudius = onSearchAudius,
+                onSearchRadio = onSearchRadio,
+                onPlayTrack = onPlayOnlineTrack
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 120.dp)
+            ) {
 
         // Hero Glass Banner
         item {
@@ -257,6 +306,77 @@ fun HomeScreen(
             }
         }
 
+        // Playlists & AI Mixes Section
+        if (playlists.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Playlists & Smart AI Mixes",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                )
+            }
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(playlists) { playlist ->
+                        LiquidGlassCard(
+                            themeConfig = themeConfig,
+                            modifier = Modifier
+                                .width(140.dp)
+                                .clickable { onPlaylistClick(playlist) },
+                            cornerRadius = 20.dp,
+                            testTag = "playlist_card_${playlist.id}"
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(120.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            Brush.linearGradient(
+                                                colors = listOf(
+                                                    Color(0xFFF27D26).copy(alpha = 0.85f),
+                                                    Color(0xFFA855F7).copy(alpha = 0.85f),
+                                                    Color(0xFF06B6D4).copy(alpha = 0.85f)
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlaylistPlay,
+                                        contentDescription = "Playlist",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = playlist.name,
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = playlist.description ?: "Local Playlist",
+                                    color = Color(0xFFCBD5E1),
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Recently Played Section
         if (recentlyPlayed.isNotEmpty()) {
             item {
@@ -352,6 +472,8 @@ fun HomeScreen(
         }
     }
 }
+}
+}
 
 @Composable
 fun SongRowItem(
@@ -398,8 +520,11 @@ fun SongRowItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (!song.moodTags.isNullOrBlank()) {
+                    val formattedTags = song.moodTags.split(",").take(3).joinToString(" • ") { tag ->
+                        "#${tag.trim().removePrefix("#")}"
+                    }
                     Text(
-                        text = song.moodTags.split(",").take(3).joinToString(" • ") { "#${it.trim().removePrefix("#")}" },
+                        text = formattedTags,
                         color = Color(0xFFF27D26),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,

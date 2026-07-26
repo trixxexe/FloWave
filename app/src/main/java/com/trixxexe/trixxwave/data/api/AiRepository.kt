@@ -16,6 +16,48 @@ class AiRepository(private val openAiService: OpenAiService) {
         }
     }
 
+    suspend fun fetchAvailableModels(config: AiConfig): Result<List<String>> {
+        if (config.apiKey.isBlank()) {
+            return Result.failure(IllegalArgumentException("Please enter an API Key first."))
+        }
+        return try {
+            var baseUrl = config.customEndpoint.trim()
+            if (!baseUrl.endsWith("/")) {
+                baseUrl += "/"
+            }
+            val modelsUrl = if (baseUrl.endsWith("models") || baseUrl.endsWith("models/")) {
+                baseUrl
+            } else {
+                "${baseUrl}models"
+            }
+            val response = openAiService.getModels(
+                url = modelsUrl,
+                authorization = "Bearer ${config.apiKey}"
+            )
+            if (response.isSuccessful) {
+                val list = response.body()?.data?.map { it.id }?.filter { it.isNotBlank() }?.sorted() ?: emptyList()
+                if (list.isNotEmpty()) {
+                    Result.success(list)
+                } else {
+                    Result.failure(Exception("No models returned by provider."))
+                }
+            } else {
+                val code = response.code()
+                val errText = when (code) {
+                    401 -> "HTTP 401: Invalid API Key or Unauthorized."
+                    403 -> "HTTP 403: Forbidden access."
+                    404 -> "HTTP 404: Models endpoint not found at $modelsUrl."
+                    429 -> "HTTP 429: Rate limit or quota exceeded."
+                    500, 502, 503 -> "HTTP $code: Provider server error."
+                    else -> "HTTP $code: ${response.errorBody()?.string()?.take(150)}"
+                }
+                Result.failure(Exception(errText))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error: ${e.localizedMessage}"))
+        }
+    }
+
     suspend fun testConnection(config: AiConfig): Result<String> {
         if (config.apiKey.isBlank()) {
             return Result.failure(IllegalArgumentException("API Key is missing"))

@@ -1,0 +1,42 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M60,0 A60,60 0 1,1 60,120 A60,60 0 1,1 60,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="120"
+                android:endY="120"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF85FFBD"/>
+                <item android:offset="1.0" android:color="#FFFFFB7D"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Cat Ears -->
+    <path android:fillColor="#FFFF007A" android:pathData="M34,30 L22,12 L42,22 Z M86,30 L98,12 L78,22 Z"/>
+    <!-- Pink Hair -->
+    <path
+        android:fillColor="#FFFF80AB"
+        android:pathData="M30,35 C30,20 90,20 90,35 C90,70 85,95 80,105 L40,105 C35,95 30,70 30,35 Z"/>
+    <!-- Face -->
+    <path
+        android:fillColor="#FFFFF5F0"
+        android:pathData="M40,38 C40,28 80,28 80,38 C80,64 70,78 60,78 C50,78 40,64 40,38 Z"/>
+    <!-- Wink Eye -->
+    <path android:strokeColor="#FFC1078A" android:strokeWidth="2.5" android:strokeLineCap="round" android:pathData="M44,48 Q48,44 52,48"/>
+    <!-- Open Eye -->
+    <path
+        android:fillColor="#FFC1078A"
+        android:pathData="M66,48 A4,6 0 1,1 74,48 A4,6 0 1,1 66,48 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M69.5,46 A1.5,2 0 1,1 72.5,46 A1.5,2 0 1,1 69.5,46 Z"/>
+    <!-- Smile -->
+    <path android:strokeColor="#FFC1078A" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M54,64 Q60,68 66,64"/>
+</vector>

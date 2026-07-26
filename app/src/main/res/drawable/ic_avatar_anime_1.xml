@@ -1,0 +1,67 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- Background Circle -->
+    <path
+        android:pathData="M60,0 A60,60 0 1,1 60,120 A60,60 0 1,1 60,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="120"
+                android:endY="120"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF7000FF"/>
+                <item android:offset="1.0" android:color="#FF00F0FF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Hair Back -->
+    <path
+        android:fillColor="#FF2A085C"
+        android:pathData="M30,45 C25,75 35,95 40,110 C50,115 70,115 80,110 C85,95 95,75 90,45 Z"/>
+    <!-- Face Shape -->
+    <path
+        android:fillColor="#FFFFDFD0"
+        android:pathData="M42,42 C42,30 78,30 78,42 C78,66 70,82 60,82 C50,82 42,66 42,42 Z"/>
+    <!-- Cyber Visor -->
+    <path
+        android:pathData="M38,46 L82,46 L78,58 L42,58 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="38"
+                android:startY="46"
+                android:endX="82"
+                android:endY="58"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF00F0FF"/>
+                <item android:offset="1.0" android:color="#FFFF007A"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Visor Highlight -->
+    <path
+        android:fillColor="#80FFFFFF"
+        android:pathData="M42,48 L78,48 L76,51 L44,51 Z"/>
+    <!-- Hair Bangs -->
+    <path
+        android:fillColor="#FF4A1596"
+        android:pathData="M35,40 C35,25 45,18 60,18 C75,18 85,25 85,40 C80,32 70,35 60,28 C50,35 40,32 35,40 Z"/>
+    <!-- Headphones Arc -->
+    <path
+        android:fillColor="#FF00F0FF"
+        android:pathData="M32,45 C32,20 88,20 88,45 L84,45 C84,24 36,24 36,45 Z"/>
+    <!-- Headphones Cups -->
+    <path
+        android:fillColor="#FFFF007A"
+        android:pathData="M28,42 C25,42 25,58 28,58 L34,58 L34,42 Z M92,42 C95,42 95,58 92,58 L86,58 L86,42 Z"/>
+    <!-- Smile -->
+    <path
+        android:strokeColor="#FF2A085C"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M55,68 Q60,72 65,68"/>
+</vector>

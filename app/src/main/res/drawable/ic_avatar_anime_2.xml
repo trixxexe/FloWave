@@ -1,0 +1,46 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M60,0 A60,60 0 1,1 60,120 A60,60 0 1,1 60,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="120"
+                android:endY="120"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF00F0FF"/>
+                <item android:offset="1.0" android:color="#FF002266"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Spiky Hair -->
+    <path
+        android:fillColor="#FF00E5FF"
+        android:pathData="M30,50 L20,30 L40,35 L45,15 L60,30 L75,15 L80,35 L100,30 L90,50 Z"/>
+    <!-- Face -->
+    <path
+        android:fillColor="#FFFFE0D0"
+        android:pathData="M40,40 C40,30 80,30 80,40 C80,68 70,82 60,82 C50,82 40,68 40,40 Z"/>
+    <!-- Eyes -->
+    <path
+        android:fillColor="#FF002266"
+        android:pathData="M44,50 A4,6 0 1,1 52,50 A4,6 0 1,1 44,50 Z M68,50 A4,6 0 1,1 76,50 A4,6 0 1,1 68,50 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M47.5,48 A1.5,2 0 1,1 50.5,48 A1.5,2 0 1,1 47.5,48 Z M71.5,48 A1.5,2 0 1,1 74.5,48 A1.5,2 0 1,1 71.5,48 Z"/>
+    <!-- Headphones -->
+    <path
+        android:fillColor="#FFF27D26"
+        android:pathData="M30,45 C30,15 90,15 90,45 L85,45 C85,20 35,20 35,45 Z M26,42 L34,42 L34,62 L26,62 Z M86,42 L94,42 L94,62 L86,62 Z"/>
+    <!-- Smile -->
+    <path
+        android:strokeColor="#FF002266"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M52,66 Q60,72 68,66"/>
+</vector>

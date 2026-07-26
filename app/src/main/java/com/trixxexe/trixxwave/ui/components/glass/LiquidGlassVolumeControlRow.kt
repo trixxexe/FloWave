@@ -1,7 +1,14 @@
 package com.trixxexe.trixxwave.ui.components.glass
 
 import android.content.Context
+import android.content.Intent
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,18 +42,19 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.trixxexe.trixxwave.data.preferences.ThemeConfig
 
-data class AudioOutputDevice(
-    val id: String,
+data class AudioOutputDeviceItem(
+    val id: Int,
     val name: String,
-    val type: String,
+    val typeName: String,
     val icon: ImageVector,
-    val isConnected: Boolean,
-    val isSelected: Boolean
+    val isExternal: Boolean,
+    val audioDeviceInfo: AudioDeviceInfo?
 )
 
 @Composable
@@ -63,7 +71,34 @@ fun LiquidGlassVolumeControlRow(
     }
     
     var showDeviceDialog by remember { mutableStateOf(false) }
-    var selectedDeviceName by remember { mutableStateOf("Bluetooth AirPods Pro") }
+    var connectedDevices by remember { mutableStateOf(getConnectedOutputDevices(context)) }
+    var selectedDeviceId by remember { mutableIntStateOf(-1) }
+
+    // Register Audio Device Listener for real-time Aux / Bluetooth / USB connection detection
+    DisposableEffect(context) {
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                connectedDevices = getConnectedOutputDevices(context)
+            }
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                connectedDevices = getConnectedOutputDevices(context)
+            }
+        }
+        audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+        onDispose {
+            audioManager.unregisterAudioDeviceCallback(callback)
+        }
+    }
+
+    val externalDevices = remember(connectedDevices) {
+        connectedDevices.filter { it.isExternal }
+    }
+
+    val activeDevice = remember(connectedDevices, selectedDeviceId) {
+        connectedDevices.find { it.id == selectedDeviceId }
+            ?: externalDevices.firstOrNull()
+            ?: connectedDevices.find { !it.isExternal }
+    }
 
     val accentColor = getThemeAccentColor(themeConfig)
 
@@ -160,7 +195,7 @@ fun LiquidGlassVolumeControlRow(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Text(
-                    text = "$volumePercent",
+                    text = "$volumePercent%",
                     color = Color.White,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
@@ -169,32 +204,38 @@ fun LiquidGlassVolumeControlRow(
             }
         }
 
-        // Roundish Glass Output Device Shower Button
-        Box(
-            modifier = Modifier
-                .size(52.dp)
-                .testTag("bluetooth_device_shower_button")
-                .liquidGlass(
-                    themeConfig = themeConfig,
-                    cornerRadius = 26.dp
-                )
-                .clickable { showDeviceDialog = true },
-            contentAlignment = Alignment.Center
+        // Roundish Glass Output Device Switcher Button - Appears when external audio devices (Bluetooth / Aux / USB / Cast) are connected
+        AnimatedVisibility(
+            visible = externalDevices.isNotEmpty(),
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut()
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(accentColor.copy(alpha = 0.2f))
-                    .border(1.dp, accentColor.copy(alpha = 0.5f), CircleShape),
+                    .size(52.dp)
+                    .testTag("bluetooth_device_shower_button")
+                    .liquidGlass(
+                        themeConfig = themeConfig,
+                        cornerRadius = 26.dp
+                    )
+                    .clickable { showDeviceDialog = true },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.BluetoothAudio,
-                    contentDescription = "Bluetooth Device Output",
-                    tint = accentColor,
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.25f))
+                        .border(1.dp, accentColor.copy(alpha = 0.6f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = activeDevice?.icon ?: Icons.Default.BluetoothAudio,
+                        contentDescription = "Audio Device Output Switcher",
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
@@ -202,9 +243,11 @@ fun LiquidGlassVolumeControlRow(
     if (showDeviceDialog) {
         AudioOutputDeviceDialog(
             themeConfig = themeConfig,
-            selectedDeviceName = selectedDeviceName,
-            onSelectDevice = { name ->
-                selectedDeviceName = name
+            devices = connectedDevices,
+            activeDeviceId = activeDevice?.id ?: -1,
+            onSelectDevice = { deviceItem ->
+                selectedDeviceId = deviceItem.id
+                switchAudioDevice(context, deviceItem)
                 showDeviceDialog = false
             },
             onDismiss = { showDeviceDialog = false }
@@ -212,21 +255,80 @@ fun LiquidGlassVolumeControlRow(
     }
 }
 
+fun getConnectedOutputDevices(context: Context): List<AudioOutputDeviceItem> {
+    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    val result = mutableListOf<AudioOutputDeviceItem>()
+
+    for (device in devices) {
+        val type = device.type
+        val rawName = device.productName?.toString()?.trim()
+
+        val (icon, typeName, defaultName) = when (type) {
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_BLE_SPEAKER -> Triple(Icons.Default.Bluetooth, "Bluetooth Audio", "Bluetooth Audio Device")
+
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_AUX_LINE -> Triple(Icons.Default.Headphones, "Aux / Wired Headset", "3.5mm Aux / Headphones")
+
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_ACCESSORY -> Triple(Icons.Default.SpeakerGroup, "USB DAC Audio", "USB Audio DAC")
+
+            AudioDeviceInfo.TYPE_IP,
+            AudioDeviceInfo.TYPE_REMOTE_SUBMIX -> Triple(Icons.Default.Cast, "Cast / Network", "Wireless Audio Cast")
+
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> Triple(Icons.Default.Speaker, "Phone Speaker", "Internal Phone Speaker")
+
+            else -> continue
+        }
+
+        val displayName = if (!rawName.isNullOrBlank() && rawName != "0") rawName else defaultName
+        val isExternal = type != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER && type != AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+
+        result.add(
+            AudioOutputDeviceItem(
+                id = device.id,
+                name = displayName,
+                typeName = typeName,
+                icon = icon,
+                isExternal = isExternal,
+                audioDeviceInfo = device
+            )
+        )
+    }
+    return result
+}
+
+fun switchAudioDevice(context: Context, deviceItem: AudioOutputDeviceItem) {
+    try {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (deviceItem.isExternal && deviceItem.audioDeviceInfo != null) {
+                audioManager.setCommunicationDevice(deviceItem.audioDeviceInfo)
+            } else {
+                audioManager.clearCommunicationDevice()
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
 @Composable
 fun AudioOutputDeviceDialog(
     themeConfig: ThemeConfig,
-    selectedDeviceName: String,
-    onSelectDevice: (String) -> Unit,
+    devices: List<AudioOutputDeviceItem>,
+    activeDeviceId: Int,
+    onSelectDevice: (AudioOutputDeviceItem) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val accentColor = getThemeAccentColor(themeConfig)
-
-    val devices = listOf(
-        AudioOutputDevice("1", "Bluetooth AirPods Pro", "Bluetooth Audio", Icons.Default.Headphones, isConnected = true, isSelected = selectedDeviceName == "Bluetooth AirPods Pro"),
-        AudioOutputDevice("2", "Phone Internal Speaker", "System Speaker", Icons.Default.Speaker, isConnected = true, isSelected = selectedDeviceName == "Phone Internal Speaker"),
-        AudioOutputDevice("3", "FloWave AirPlay Dock", "AirPlay / Cast", Icons.Default.Cast, isConnected = true, isSelected = selectedDeviceName == "FloWave AirPlay Dock"),
-        AudioOutputDevice("4", "Type-C High-Res DAC", "Wired Audio", Icons.Default.SpeakerGroup, isConnected = false, isSelected = selectedDeviceName == "Type-C High-Res DAC")
-    )
 
     Dialog(onDismissRequest = onDismiss) {
         LiquidGlassCard(
@@ -255,7 +357,7 @@ fun AudioOutputDeviceDialog(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Audio Output Devices",
+                            text = "Audio Output Panel",
                             color = Color.White,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
@@ -276,72 +378,116 @@ fun AudioOutputDeviceDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                devices.forEach { device ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (device.isSelected) accentColor.copy(alpha = 0.22f)
-                                else Color.White.copy(alpha = 0.05f)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = if (device.isSelected) accentColor.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .clickable { onSelectDevice(device.name) }
-                            .padding(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(if (device.isSelected) accentColor else Color.White.copy(alpha = 0.1f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = device.icon,
-                                        contentDescription = device.name,
-                                        tint = if (device.isSelected) Color.Black else Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = device.name,
-                                        color = Color.White,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "${device.type} • ${if (device.isConnected) "Connected" else "Disconnected"}",
-                                        color = if (device.isConnected) accentColor else Color(0xFF64748B),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
+                if (devices.isEmpty()) {
+                    Text(
+                        text = "No active audio devices found.",
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                } else {
+                    devices.forEach { device ->
+                        val isSelected = device.id == activeDeviceId
 
-                            if (device.isSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = "Selected",
-                                    tint = accentColor,
-                                    modifier = Modifier.size(20.dp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (isSelected) accentColor.copy(alpha = 0.22f)
+                                    else Color.White.copy(alpha = 0.05f)
                                 )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) accentColor.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .clickable { onSelectDevice(device) }
+                                .padding(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isSelected) accentColor else Color.White.copy(alpha = 0.1f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = device.icon,
+                                            contentDescription = device.name,
+                                            tint = if (isSelected) Color.Black else Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = device.name,
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${device.typeName} • Connected",
+                                            color = if (isSelected) accentColor else Color(0xFF94A3B8),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Active Route",
+                                        tint = accentColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Launch System Native Media Output Control Sheet Button
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent("com.android.settings.panel.action.MEDIA_OUTPUT").apply {
+                                putExtra("com.android.settings.panel.extra.PACKAGE_NAME", context.packageName)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // Fallback to system sound settings if media panel is unavailable
+                            try {
+                                context.startActivity(Intent(android.provider.Settings.ACTION_SOUND_SETTINGS))
+                            } catch (ex: Exception) { ex.printStackTrace() }
+                        }
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(alpha = 0.85f)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(imageVector = Icons.Default.Cast, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("System Output Settings", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }
     }
 }
+

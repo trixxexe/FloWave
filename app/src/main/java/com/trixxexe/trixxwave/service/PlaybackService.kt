@@ -49,7 +49,11 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
+        val cacheFactory = com.trixxexe.trixxwave.media.MediaCacheManager.getCacheDataSourceFactory(this)
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheFactory)
+
         val exoPlayer = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -106,10 +110,58 @@ class PlaybackService : MediaSessionService() {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 val audioSessionId = exoPlayer.audioSessionId
                 visualizerHelper.attachToAudioSession(audioSessionId, serviceScope, isPlaying)
+                updateWidgetFromPlayer()
+                if (isPlaying) {
+                    startWidgetProgressLoop()
+                } else {
+                    widgetPingJob?.cancel()
+                }
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                updateWidgetFromPlayer()
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                updateWidgetFromPlayer()
             }
         }
         playerListener = listener
         exoPlayer.addListener(listener)
+
+        WidgetUpdateWorker.schedulePeriodicUpdates(this)
+    }
+
+    private var widgetPingJob: Job? = null
+
+    private fun updateWidgetFromPlayer() {
+        val p = player ?: return
+        val item = p.currentMediaItem
+        val metadata = item?.mediaMetadata
+        val title = metadata?.title?.toString() ?: "FloWave Player"
+        val artist = metadata?.artist?.toString() ?: "Liquid Glass Aesthetics"
+        val artUri = metadata?.artworkUri?.toString()
+        val isPlaying = p.isPlaying
+
+        com.trixxexe.trixxwave.widget.WidgetStateStore.savePlaybackState(
+            context = this,
+            songTitle = title,
+            artistName = artist,
+            isPlaying = isPlaying,
+            isLiked = com.trixxexe.trixxwave.widget.WidgetStateStore.isLiked(this),
+            albumArtUri = artUri
+        )
+        com.trixxexe.trixxwave.widget.TrixxWaveWidgetProvider.updateAllWidgets(this)
+    }
+
+    private fun startWidgetProgressLoop() {
+        widgetPingJob?.cancel()
+        widgetPingJob = serviceScope.launch {
+            while (player?.isPlaying == true) {
+                updateWidgetFromPlayer()
+                delay(10000L)
+            }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -164,9 +216,18 @@ class PlaybackService : MediaSessionService() {
 
         val playlist = if (queue.isNotEmpty()) queue else listOf(song)
         val mediaItems = playlist.map { s ->
+            val metadata = androidx.media3.common.MediaMetadata.Builder()
+                .setTitle(s.title)
+                .setArtist(s.artist)
+                .setAlbumTitle(s.album)
+                .setArtworkUri(s.albumArtUri?.let { android.net.Uri.parse(it) })
+                .build()
+
+            val uriToPlay = s.streamUrl?.takeIf { it.isNotBlank() } ?: s.filePath
             val builder = MediaItem.Builder()
                 .setMediaId(s.id.toString())
-                .setUri(s.filePath)
+                .setUri(uriToPlay)
+                .setMediaMetadata(metadata)
 
             if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
                 val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
@@ -194,9 +255,18 @@ class PlaybackService : MediaSessionService() {
 
         val playlist = if (queue.isNotEmpty()) queue else listOf(song)
         val mediaItems = playlist.map { s ->
+            val metadata = androidx.media3.common.MediaMetadata.Builder()
+                .setTitle(s.title)
+                .setArtist(s.artist)
+                .setAlbumTitle(s.album)
+                .setArtworkUri(s.albumArtUri?.let { android.net.Uri.parse(it) })
+                .build()
+
+            val uriToPlay = s.streamUrl?.takeIf { it.isNotBlank() } ?: s.filePath
             val builder = MediaItem.Builder()
                 .setMediaId(s.id.toString())
-                .setUri(s.filePath)
+                .setUri(uriToPlay)
+                .setMediaMetadata(metadata)
 
             if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
                 val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
@@ -219,6 +289,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        widgetPingJob?.cancel()
+        widgetPingJob = null
         sleepTimerJob?.cancel()
         sleepTimerJob = null
         equalizerManager.release()

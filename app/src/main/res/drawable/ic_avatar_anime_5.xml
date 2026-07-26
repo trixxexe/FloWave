@@ -1,0 +1,44 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M60,0 A60,60 0 1,1 60,120 A60,60 0 1,1 60,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="120"
+                android:endY="120"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF4158D0"/>
+                <item android:offset="0.46" android:color="#FFC850C0"/>
+                <item android:offset="1.0" android:color="#FFFFCC70"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Hair -->
+    <path
+        android:fillColor="#FF2E1065"
+        android:pathData="M32,36 C32,20 88,20 88,36 C88,75 80,105 75,112 L45,112 C40,105 32,75 32,36 Z"/>
+    <!-- Face -->
+    <path
+        android:fillColor="#FFFFF3EC"
+        android:pathData="M42,38 C42,28 78,28 78,38 C78,64 70,78 60,78 C50,78 42,64 42,38 Z"/>
+    <!-- Eyes -->
+    <path
+        android:fillColor="#FF7C3AED"
+        android:pathData="M46,48 A4,6 0 1,1 54,48 A4,6 0 1,1 46,48 Z M66,48 A4,6 0 1,1 74,48 A4,6 0 1,1 66,48 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M49.5,46 A1.5,2 0 1,1 52.5,46 A1.5,2 0 1,1 49.5,46 Z M69.5,46 A1.5,2 0 1,1 72.5,46 A1.5,2 0 1,1 69.5,46 Z"/>
+    <!-- Mic Stand -->
+    <path
+        android:fillColor="#FFC0C0C0"
+        android:pathData="M58,62 L62,62 L62,82 L58,82 Z"/>
+    <path
+        android:fillColor="#FFE0E0E0"
+        android:pathData="M55,60 A5,5 0 1,1 65,60 A5,5 0 1,1 55,60 Z"/>
+</vector>

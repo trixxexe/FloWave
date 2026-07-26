@@ -30,9 +30,13 @@ class EncryptedKeyManager(context: Context) {
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // Fallback for emulator or older crypto provider
-            context.getSharedPreferences("trixxwave_secure_ai_prefs_fallback", Context.MODE_PRIVATE)
+            try {
+                context.getSharedPreferences("trixxwave_secure_ai_prefs_fallback", Context.MODE_PRIVATE)
+            } catch (e2: Throwable) {
+                context.getSharedPreferences("trixxwave_prefs_basic", Context.MODE_PRIVATE)
+            }
         }
     }
 

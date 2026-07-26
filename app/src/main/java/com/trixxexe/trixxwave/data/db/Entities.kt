@@ -22,7 +22,10 @@ data class Song(
     val genre: String? = null,
     val trimStartMs: Long = 0L,
     val trimEndMs: Long = 0L,
-    val isGaplessAnalyzed: Boolean = false
+    val isGaplessAnalyzed: Boolean = false,
+    val source: String = "LOCAL",
+    val streamUrl: String? = null,
+    val originalUrl: String? = null
 )
 
 @Entity(tableName = "albums")
@@ -111,6 +114,7 @@ data class LyricsCache(
     @PrimaryKey val songId: Long,
     val plainLyrics: String? = null,
     val syncedLrc: String? = null,
+    val aiInsight: String? = null,
     val source: String = "LRCLIB",
     val fetchedAt: Long = System.currentTimeMillis()
 )

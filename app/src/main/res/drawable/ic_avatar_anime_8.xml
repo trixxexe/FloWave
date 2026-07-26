@@ -1,0 +1,40 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M60,0 A60,60 0 1,1 60,120 A60,60 0 1,1 60,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="120"
+                android:endY="120"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFF27D26"/>
+                <item android:offset="1.0" android:color="#FFFF2A6D"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Hair -->
+    <path
+        android:fillColor="#FF4A2810"
+        android:pathData="M35,35 C35,20 85,20 85,35 L90,55 L80,55 L75,35 L45,35 L40,55 L30,55 Z"/>
+    <!-- Face -->
+    <path
+        android:fillColor="#FFFFE0D0"
+        android:pathData="M40,38 C40,28 80,28 80,38 C80,64 70,78 60,78 C50,78 40,64 40,38 Z"/>
+    <!-- Bandana -->
+    <path android:fillColor="#FFFFD700" android:pathData="M35,32 L85,32 L85,38 L35,38 Z"/>
+    <!-- Eyes -->
+    <path
+        android:fillColor="#FF3E2723"
+        android:pathData="M44,48 A4,6 0 1,1 52,48 A4,6 0 1,1 44,48 Z M68,48 A4,6 0 1,1 76,48 A4,6 0 1,1 68,48 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M47.5,46 A1.5,2 0 1,1 50.5,46 A1.5,2 0 1,1 47.5,46 Z M71.5,46 A1.5,2 0 1,1 74.5,46 A1.5,2 0 1,1 71.5,46 Z"/>
+    <!-- Smile -->
+    <path android:strokeColor="#FF3E2723" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M52,64 Q60,70 68,64"/>
+</vector>

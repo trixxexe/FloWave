@@ -1,14 +1,22 @@
 package com.trixxexe.trixxwave
 
+import android.Manifest
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -20,25 +28,30 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.trixxexe.trixxwave.data.db.Playlist
+import com.trixxexe.trixxwave.data.db.Song
 import com.trixxexe.trixxwave.data.preferences.ThemeConfig
+import com.trixxexe.trixxwave.service.DynamicIslandOverlayService
 import com.trixxexe.trixxwave.service.PlaybackService
 import com.trixxexe.trixxwave.ui.components.glass.AmbientGlassBackground
 import com.trixxexe.trixxwave.ui.components.glass.DynamicIslandPlayer
 import com.trixxexe.trixxwave.ui.components.glass.LiquidGlassNavigationBar
 import com.trixxexe.trixxwave.ui.components.glass.MiniPlayer
+import com.trixxexe.trixxwave.ui.components.glass.OverlayPermissionDialog
+import com.trixxexe.trixxwave.ui.components.glass.PlaylistDetailDialog
 import com.trixxexe.trixxwave.ui.components.glass.TopGlassmorphicClock
+import com.trixxexe.trixxwave.ui.components.glass.getThemeAccentColor
 import com.trixxexe.trixxwave.ui.screens.*
 import com.trixxexe.trixxwave.ui.theme.TrixxWaveTheme
 import com.trixxexe.trixxwave.ui.viewmodel.MainViewModel
 import com.trixxexe.trixxwave.ui.viewmodel.SettingsViewModel
-
-import androidx.navigation.compose.currentBackStackEntryAsState
-import com.trixxexe.trixxwave.ui.components.glass.getThemeAccentColor
 
 class MainActivity : ComponentActivity() {
 
@@ -65,10 +78,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Bind PlaybackService
-        val serviceIntent = Intent(this, PlaybackService::class.java)
-        startService(serviceIntent)
-        bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+        // Safely bind PlaybackService
+        try {
+            val serviceIntent = Intent(this, PlaybackService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         setContent {
             val themeConfig by mainViewModel.themeConfig.collectAsState()
@@ -86,10 +107,31 @@ class MainActivity : ComponentActivity() {
 
             val aiConfig by settingsViewModel.aiConfig.collectAsState()
             val testStatus by settingsViewModel.testStatus.collectAsState()
+            val fetchedModels by settingsViewModel.fetchedModels.collectAsState()
+            val isFetchingModels by settingsViewModel.isFetchingModels.collectAsState()
+            val fetchModelsStatus by settingsViewModel.fetchModelsStatus.collectAsState()
             val profiles by settingsViewModel.profiles.collectAsState()
             val isFirstRun by settingsViewModel.isFirstRun.collectAsState()
 
             var showNowPlayingModal by remember { mutableStateOf(false) }
+            var showOverlayPermissionDialog by remember { mutableStateOf(false) }
+            val context = LocalContext.current
+
+            LaunchedEffect(themeConfig.dynamicIslandEnabled) {
+                try {
+                    if (themeConfig.dynamicIslandEnabled) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(context)) {
+                            DynamicIslandOverlayService.startService(context)
+                        } else {
+                            showOverlayPermissionDialog = true
+                        }
+                    } else {
+                        DynamicIslandOverlayService.stopService(context)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
 
             val visualizerBands = playbackService?.visualizerHelper?.fftBands?.collectAsState()?.value
                 ?: FloatArray(20) { 0.1f }
@@ -99,6 +141,47 @@ class MainActivity : ComponentActivity() {
 
             val gaplessState by mainViewModel.gaplessState.collectAsState()
             val recentSearches by mainViewModel.recentSearches.collectAsState()
+
+            val isOnlineMode by mainViewModel.isOnlineMode.collectAsState()
+            val activeOnlineTab by mainViewModel.activeOnlineTab.collectAsState()
+            val youtubeResults by mainViewModel.youtubeSearchResults.collectAsState()
+            val audiusTracks by mainViewModel.audiusTrending.collectAsState()
+            val radioStations by mainViewModel.radioStations.collectAsState()
+            val isExtractingStream by mainViewModel.isExtractingStream.collectAsState()
+            val isOnlineSearchLoading by mainViewModel.isOnlineSearchLoading.collectAsState()
+            val onlineStreamError by mainViewModel.onlineStreamError.collectAsState()
+
+            val permissionsToRequest = remember {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    arrayOf(
+                        Manifest.permission.READ_MEDIA_AUDIO,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    )
+                } else {
+                    arrayOf(
+                        Manifest.permission.READ_EXTERNAL_STORAGE
+                    )
+                }
+            }
+
+            val permissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissionsMap ->
+                val allGranted = permissionsMap.values.all { it }
+                if (allGranted) {
+                    settingsViewModel.rescanLibrary()
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                permissionLauncher.launch(permissionsToRequest)
+            }
+
+            var selectedPlaylistForDetail by remember { mutableStateOf<Playlist?>(null) }
+            val playlistSongsFlow = remember(selectedPlaylistForDetail) {
+                selectedPlaylistForDetail?.let { mainViewModel.getSongsForPlaylist(it.id) }
+            }
+            val playlistSongs by (playlistSongsFlow?.collectAsState(initial = emptyList()) ?: remember { mutableStateOf(emptyList<Song>()) })
 
             LaunchedEffect(currentSong, isPlaying, themeConfig.gaplessEnabled, isBound) {
                 val song = currentSong
@@ -146,6 +229,31 @@ class MainActivity : ComponentActivity() {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
 
+                    var lastBackPressTime by remember { mutableLongStateOf(0L) }
+
+                    BackHandler(enabled = true) {
+                        when {
+                            showNowPlayingModal -> {
+                                showNowPlayingModal = false
+                            }
+                            selectedPlaylistForDetail != null -> {
+                                selectedPlaylistForDetail = null
+                            }
+                            currentRoute != "home" && currentRoute != "onboarding" && currentRoute != null -> {
+                                navController.popBackStack()
+                            }
+                            currentRoute == "home" -> {
+                                val currentTime = System.currentTimeMillis()
+                                if (currentTime - lastBackPressTime < 2000L) {
+                                    (context as? Activity)?.finish()
+                                } else {
+                                    lastBackPressTime = currentTime
+                                    Toast.makeText(context, "Press back again to exit FloWave", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+
                     Scaffold(
                         containerColor = Color.Transparent,
                         topBar = {
@@ -163,14 +271,18 @@ class MainActivity : ComponentActivity() {
                         },
                         bottomBar = {
                             if (currentRoute != "onboarding") {
-                                Column {
+                                Column(modifier = Modifier.navigationBarsPadding()) {
                                     // Floating Liquid Glass MiniPlayer
                                     if (currentSong != null && !showNowPlayingModal) {
                                         MiniPlayer(
                                             song = currentSong,
                                             isPlaying = isPlaying,
+                                            currentPositionMs = currentPositionMs,
                                             onPlayPauseToggle = { mainViewModel.togglePlayPause() },
                                             onSkipNext = { mainViewModel.skipNext() },
+                                            onSkipPrevious = { mainViewModel.skipPrevious() },
+                                            onSeek = { pos -> mainViewModel.seekToPosition(pos) },
+                                            onToggleLike = { song -> mainViewModel.toggleLikeSong(song) },
                                             onExpandNowPlaying = { showNowPlayingModal = true },
                                             themeConfig = themeConfig
                                         )
@@ -218,7 +330,23 @@ class MainActivity : ComponentActivity() {
                                     likedSongs = likedSongs,
                                     allSongs = allSongs,
                                     playlists = playlists,
+                                    isOnlineMode = isOnlineMode,
+                                    activeOnlineTab = activeOnlineTab,
+                                    youtubeResults = youtubeResults,
+                                    audiusTracks = audiusTracks,
+                                    radioStations = radioStations,
+                                    isExtractingStream = isExtractingStream,
+                                    isOnlineSearchLoading = isOnlineSearchLoading,
+                                    onlineStreamError = onlineStreamError,
+                                    onToggleOnlineMode = { online -> mainViewModel.toggleOnlineMode(online) },
+                                    onSelectOnlineTab = { tab -> mainViewModel.setOnlineTab(tab) },
+                                    onExtractYoutubeUrl = { url -> mainViewModel.extractAndPlayYoutubeUrl(url) },
+                                    onSearchYoutube = { q -> mainViewModel.searchYoutube(q) },
+                                    onSearchAudius = { q -> mainViewModel.searchAudius(q) },
+                                    onSearchRadio = { q -> mainViewModel.fetchRadioStations(q) },
+                                    onPlayOnlineTrack = { song -> mainViewModel.playOnlineTrack(song) },
                                     onSongClick = { song -> mainViewModel.playSong(song) },
+                                    onPlaylistClick = { pl -> selectedPlaylistForDetail = pl },
                                     onGenerateSmartMix = { prompt -> mainViewModel.generateSmartMix(prompt) },
                                     onNavigateToSettings = { navController.navigate("settings") },
                                     onNavigateToProfiles = { navController.navigate("profiles") },
@@ -242,7 +370,7 @@ class MainActivity : ComponentActivity() {
                                     likedSongs = likedSongs,
                                     allSongs = allSongs,
                                     themeConfig = themeConfig,
-                                    onPlaylistClick = { },
+                                    onPlaylistClick = { pl -> selectedPlaylistForDetail = pl },
                                     onSongClick = { song -> mainViewModel.playSong(song) },
                                     onRescanLibrary = { settingsViewModel.rescanLibrary() }
                                 )
@@ -252,6 +380,10 @@ class MainActivity : ComponentActivity() {
                                     themeConfig = themeConfig,
                                     aiConfig = aiConfig,
                                     testStatus = testStatus,
+                                    fetchedModels = fetchedModels,
+                                    isFetchingModels = isFetchingModels,
+                                    fetchModelsStatus = fetchModelsStatus,
+                                    onFetchModels = { provider, key, endpoint -> settingsViewModel.fetchAvailableModels(provider, key, endpoint) },
                                     onSaveAiConfig = { cfg -> settingsViewModel.saveAiConfig(cfg) },
                                     onTestAiConnection = { settingsViewModel.testAiConnection() },
                                     onSelectPreset = { preset -> settingsViewModel.updateThemePreset(preset) },
@@ -317,6 +449,17 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    // Overlay Permission Dialog for System Dynamic Island
+                    if (showOverlayPermissionDialog) {
+                        OverlayPermissionDialog(
+                            themeConfig = themeConfig,
+                            onDismiss = { showOverlayPermissionDialog = false },
+                            onPermissionGranted = {
+                                DynamicIslandOverlayService.startService(context)
+                            }
+                        )
+                    }
+
                     // Fullscreen Now Playing Overlay
                     if (showNowPlayingModal) {
                         NowPlayingScreen(
@@ -336,6 +479,25 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { showNowPlayingModal = false },
                             onReTag = { song -> mainViewModel.reTagSongWithAi(song) },
                             onSaveLyrics = { songId, plainLyrics, syncedLrc -> mainViewModel.saveCorrectedLyrics(songId, plainLyrics, syncedLrc) }
+                        )
+                    }
+
+                    // Playlist Detail Glass Modal Dialog
+                    if (selectedPlaylistForDetail != null) {
+                        val pl = selectedPlaylistForDetail!!
+                        PlaylistDetailDialog(
+                            playlist = pl,
+                            songs = playlistSongs,
+                            themeConfig = themeConfig,
+                            onPlayAll = { songs -> mainViewModel.playPlaylist(songs, 0) },
+                            onPlayShuffle = { songs -> mainViewModel.playPlaylist(songs.shuffled(), 0) },
+                            onSongClick = { song, queue ->
+                                val idx = queue.indexOf(song).coerceAtLeast(0)
+                                mainViewModel.playPlaylist(queue, idx)
+                            },
+                            onRemoveSong = { songId -> mainViewModel.removeSongFromPlaylist(pl.id, songId) },
+                            onDeletePlaylist = { mainViewModel.deletePlaylist(pl) },
+                            onDismiss = { selectedPlaylistForDetail = null }
                         )
                     }
                 }
