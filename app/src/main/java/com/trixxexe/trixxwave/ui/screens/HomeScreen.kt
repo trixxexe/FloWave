@@ -202,6 +202,8 @@ fun HomeScreen(
                 audiusTracks = audiusTracks,
                 radioStations = radioStations,
                 playlists = playlists,
+                allSongs = allSongs,
+                likedSongs = likedSongs,
                 downloadStatusMap = downloadStatusMap,
                 isExtractingStream = isExtractingStream,
                 isLoading = isOnlineSearchLoading,
@@ -215,7 +217,8 @@ fun HomeScreen(
                 onToggleLike = onToggleLike,
                 onAddToPlaylist = onAddToPlaylist,
                 onDownloadSong = onDownloadSong,
-                onCreatePlaylist = onCreatePlaylist
+                onCreatePlaylist = onCreatePlaylist,
+                onPlaylistClick = onPlaylistClick
             )
         } else {
             LazyColumn(

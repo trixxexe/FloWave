@@ -338,33 +338,12 @@ class PlaybackService : MediaSessionService() {
                     .setUri(androidUri)
                     .setMediaMetadata(metadata)
 
-                val trimStart = if (isGaplessEnabled) {
-                    if (s.trimStartMs > 0) s.trimStartMs else 900L // Default 0.9s pre-music silence cut
-                } else {
-                    0L
-                }
-
-                if (isGaplessEnabled && (trimStart > 0 || s.trimEndMs > 0)) {
-                    val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(trimStart)
-
-                    if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
-                        clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(trimStart + 500L))
-                    }
-                    builder.setClippingConfiguration(clippingBuilder.build())
-                }
-
                 builder.build()
             }
 
             p.setMediaItems(mediaItems)
             val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
-            val seekStart = if (isGaplessEnabled) {
-                if (song.trimStartMs > 0) song.trimStartMs else 900L
-            } else {
-                0L
-            }
-            p.seekTo(songIndex, seekStart)
+            p.seekTo(songIndex, 0L)
             p.prepare()
             p.play()
         } catch (e: Throwable) {

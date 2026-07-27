@@ -1,5 +1,6 @@
 package com.trixxexe.trixxwave.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -21,6 +23,8 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Subscriptions
@@ -29,9 +33,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +59,8 @@ fun OnlineStreamingScreen(
     audiusTracks: List<Song>,
     radioStations: List<Song>,
     playlists: List<Playlist> = emptyList(),
+    allSongs: List<Song> = emptyList(),
+    likedSongs: List<Song> = emptyList(),
     downloadStatusMap: Map<Long, Float> = emptyMap(),
     isExtractingStream: Boolean,
     isLoading: Boolean,
@@ -68,11 +74,13 @@ fun OnlineStreamingScreen(
     onToggleLike: (Song) -> Unit = {},
     onAddToPlaylist: (Long, Song) -> Unit = { _, _ -> },
     onDownloadSong: (Song) -> Unit = {},
-    onCreatePlaylist: (String, String) -> Unit = { _, _ -> }
+    onCreatePlaylist: (String, String) -> Unit = { _, _ -> },
+    onPlaylistClick: (Playlist) -> Unit = {}
 ) {
     val accentColor = getThemeAccentColor(themeConfig)
     var urlOrSearchInput by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
     var selectedSongForPlaylist by remember { mutableStateOf<Song?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
@@ -115,6 +123,7 @@ fun OnlineStreamingScreen(
                                         .clickable {
                                             selectedSongForPlaylist?.let { song ->
                                                 onAddToPlaylist(pl.id, song)
+                                                Toast.makeText(context, "Added '${song.title}' to playlist '${pl.name}'", Toast.LENGTH_SHORT).show()
                                             }
                                             selectedSongForPlaylist = null
                                         }
@@ -178,7 +187,8 @@ fun OnlineStreamingScreen(
                 Button(
                     onClick = {
                         if (newPlaylistName.isNotBlank()) {
-                            onCreatePlaylist(newPlaylistName, "Custom Playlist")
+                            onCreatePlaylist(newPlaylistName, "Online Playlist")
+                            Toast.makeText(context, "Created playlist '$newPlaylistName'", Toast.LENGTH_SHORT).show()
                             newPlaylistName = ""
                             showCreatePlaylistDialog = false
                         }
@@ -201,8 +211,8 @@ fun OnlineStreamingScreen(
             .fillMaxSize()
             .testTag("online_streaming_screen")
     ) {
-        // Liquid Glass Sub-Tab Navigation Bar
-        Row(
+        // Liquid Glass Scrollable Sub-Tab Navigation Bar
+        LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -210,21 +220,22 @@ fun OnlineStreamingScreen(
                 .background(Color.White.copy(alpha = 0.08f))
                 .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
                 .padding(4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             val tabs = listOf(
-                "YOUTUBE" to ("YouTube Audio" to Icons.Default.Subscriptions),
-                "AUDIUS" to ("Audius Discover" to Icons.Default.MusicNote),
-                "RADIO" to ("Live Radio" to Icons.Default.Radio)
+                "YOUTUBE" to ("YouTube" to Icons.Default.Subscriptions),
+                "AUDIUS" to ("Audius" to Icons.Default.MusicNote),
+                "RADIO" to ("Radio" to Icons.Default.Radio),
+                "LIKED" to ("Liked Songs" to Icons.Default.Favorite),
+                "PLAYLISTS" to ("Playlists" to Icons.Default.QueueMusic)
             )
 
-            tabs.forEach { (tabKey, pair) ->
+            items(tabs) { (tabKey, pair) ->
                 val (label, icon) = pair
                 val isSelected = activeTab == tabKey
 
                 Box(
                     modifier = Modifier
-                        .weight(1f)
                         .clip(RoundedCornerShape(20.dp))
                         .background(
                             if (isSelected) accentColor.copy(alpha = 0.25f) else Color.Transparent
@@ -235,7 +246,7 @@ fun OnlineStreamingScreen(
                             shape = RoundedCornerShape(20.dp)
                         )
                         .clickable { onTabSelected(tabKey) }
-                        .padding(vertical = 10.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -261,93 +272,95 @@ fun OnlineStreamingScreen(
             }
         }
 
-        // Search / Keyword Input Field
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = urlOrSearchInput,
-                onValueChange = { urlOrSearchInput = it },
+        // Search / Keyword Input Field (Only show for search tabs)
+        if (activeTab == "YOUTUBE" || activeTab == "AUDIUS" || activeTab == "RADIO") {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("online_search_input"),
-                placeholder = {
-                    Text(
-                        text = when (activeTab) {
-                            "YOUTUBE" -> "Search Song Name, Artist, or Paste Link..."
-                            "AUDIUS" -> "Search Audius Artists, Tracks..."
-                            else -> "Search Radio Stations by Name or Genre..."
-                        },
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 13.sp
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = if (urlOrSearchInput.startsWith("http")) Icons.Default.Link else Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = accentColor
-                    )
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(20.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = accentColor,
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                    focusedContainerColor = Color.White.copy(alpha = 0.06f),
-                    unfocusedContainerColor = Color.White.copy(alpha = 0.04f),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    focusManager.clearFocus()
-                    when (activeTab) {
-                        "YOUTUBE" -> {
-                            val trimmed = urlOrSearchInput.trim()
-                            if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.contains("youtube.com/") || trimmed.contains("youtu.be/")) {
-                                onExtractYoutubeUrl(trimmed)
-                            } else {
-                                onSearchYoutube(trimmed)
-                            }
-                        }
-                        "AUDIUS" -> onSearchAudius(urlOrSearchInput)
-                        "RADIO" -> onSearchRadio(urlOrSearchInput)
-                    }
-                })
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Button(
-                onClick = {
-                    focusManager.clearFocus()
-                    when (activeTab) {
-                        "YOUTUBE" -> {
-                            val trimmed = urlOrSearchInput.trim()
-                            if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.contains("youtube.com/") || trimmed.contains("youtu.be/")) {
-                                onExtractYoutubeUrl(trimmed)
-                            } else {
-                                onSearchYoutube(trimmed)
-                            }
-                        }
-                        "AUDIUS" -> onSearchAudius(urlOrSearchInput)
-                        "RADIO" -> onSearchRadio(urlOrSearchInput)
-                    }
-                },
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (activeTab == "YOUTUBE" && urlOrSearchInput.startsWith("http")) "Extract" else "Search",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = Color.Black
+                OutlinedTextField(
+                    value = urlOrSearchInput,
+                    onValueChange = { urlOrSearchInput = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("online_search_input"),
+                    placeholder = {
+                        Text(
+                            text = when (activeTab) {
+                                "YOUTUBE" -> "Search Song Name, Artist, or Paste Link..."
+                                "AUDIUS" -> "Search Audius Artists, Tracks..."
+                                else -> "Search Radio Stations by Name or Genre..."
+                            },
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 13.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (urlOrSearchInput.startsWith("http")) Icons.Default.Link else Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = accentColor
+                        )
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(20.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accentColor,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                        focusedContainerColor = Color.White.copy(alpha = 0.06f),
+                        unfocusedContainerColor = Color.White.copy(alpha = 0.04f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        focusManager.clearFocus()
+                        when (activeTab) {
+                            "YOUTUBE" -> {
+                                val trimmed = urlOrSearchInput.trim()
+                                if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.contains("youtube.com/") || trimmed.contains("youtu.be/")) {
+                                    onExtractYoutubeUrl(trimmed)
+                                } else {
+                                    onSearchYoutube(trimmed)
+                                }
+                            }
+                            "AUDIUS" -> onSearchAudius(urlOrSearchInput)
+                            "RADIO" -> onSearchRadio(urlOrSearchInput)
+                        }
+                    })
                 )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Button(
+                    onClick = {
+                        focusManager.clearFocus()
+                        when (activeTab) {
+                            "YOUTUBE" -> {
+                                val trimmed = urlOrSearchInput.trim()
+                                if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.contains("youtube.com/") || trimmed.contains("youtu.be/")) {
+                                    onExtractYoutubeUrl(trimmed)
+                                } else {
+                                    onSearchYoutube(trimmed)
+                                }
+                            }
+                            "AUDIUS" -> onSearchAudius(urlOrSearchInput)
+                            "RADIO" -> onSearchRadio(urlOrSearchInput)
+                        }
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = if (activeTab == "YOUTUBE" && urlOrSearchInput.startsWith("http")) "Extract" else "Search",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Color.Black
+                    )
+                }
             }
         }
 
@@ -426,9 +439,24 @@ fun OnlineStreamingScreen(
                         }
                     } else {
                         items(youtubeResults) { song ->
+                            val isDownloaded = remember(allSongs, song) {
+                                song.source == "DOWNLOADED" || allSongs.any {
+                                    (it.id == song.id && it.id > 0) ||
+                                    (it.filePath == song.filePath && song.filePath.isNotBlank()) ||
+                                    (it.title.equals(song.title, ignoreCase = true) && it.artist.equals(song.artist, ignoreCase = true) && (it.source == "DOWNLOADED" || it.filePath.contains("/downloads/")))
+                                }
+                            }
+                            val isLiked = remember(likedSongs, song) {
+                                song.isLiked || likedSongs.any {
+                                    (it.id == song.id && it.id > 0) ||
+                                    (it.title.equals(song.title, ignoreCase = true) && it.artist.equals(song.artist, ignoreCase = true) && it.isLiked)
+                                }
+                            }
                             OnlineTrackRow(
                                 song = song,
                                 themeConfig = themeConfig,
+                                isDownloaded = isDownloaded,
+                                isLiked = isLiked,
                                 downloadProgress = downloadStatusMap[song.id],
                                 onPlayClick = { onPlayTrack(song) },
                                 onToggleLike = { onToggleLike(song) },
@@ -451,9 +479,24 @@ fun OnlineStreamingScreen(
                         }
                     } else {
                         items(audiusTracks) { song ->
+                            val isDownloaded = remember(allSongs, song) {
+                                song.source == "DOWNLOADED" || allSongs.any {
+                                    (it.id == song.id && it.id > 0) ||
+                                    (it.filePath == song.filePath && song.filePath.isNotBlank()) ||
+                                    (it.title.equals(song.title, ignoreCase = true) && it.artist.equals(song.artist, ignoreCase = true) && (it.source == "DOWNLOADED" || it.filePath.contains("/downloads/")))
+                                }
+                            }
+                            val isLiked = remember(likedSongs, song) {
+                                song.isLiked || likedSongs.any {
+                                    (it.id == song.id && it.id > 0) ||
+                                    (it.title.equals(song.title, ignoreCase = true) && it.artist.equals(song.artist, ignoreCase = true) && it.isLiked)
+                                }
+                            }
                             OnlineTrackRow(
                                 song = song,
                                 themeConfig = themeConfig,
+                                isDownloaded = isDownloaded,
+                                isLiked = isLiked,
                                 downloadProgress = downloadStatusMap[song.id],
                                 onPlayClick = { onPlayTrack(song) },
                                 onToggleLike = { onToggleLike(song) },
@@ -476,16 +519,158 @@ fun OnlineStreamingScreen(
                         }
                     } else {
                         items(radioStations) { station ->
+                            val isLiked = remember(likedSongs, station) {
+                                station.isLiked || likedSongs.any {
+                                    (it.id == station.id && it.id > 0) ||
+                                    (it.title.equals(station.title, ignoreCase = true) && it.artist.equals(station.artist, ignoreCase = true) && it.isLiked)
+                                }
+                            }
                             OnlineTrackRow(
                                 song = station,
                                 themeConfig = themeConfig,
                                 isRadio = true,
+                                isLiked = isLiked,
                                 downloadProgress = downloadStatusMap[station.id],
                                 onPlayClick = { onPlayTrack(station) },
                                 onToggleLike = { onToggleLike(station) },
                                 onAddToPlaylistClick = { selectedSongForPlaylist = station },
                                 onDownloadClick = { onDownloadSong(station) }
                             )
+                        }
+                    }
+                }
+
+                "LIKED" -> {
+                    if (likedSongs.isEmpty()) {
+                        item {
+                            EmptyStatePlaceholder(
+                                title = "No Liked Songs Yet",
+                                description = "Tap the heart icon on any YouTube, Audius, or Radio track to save it to your Online Favorites!",
+                                icon = Icons.Default.Favorite,
+                                accentColor = accentColor
+                            )
+                        }
+                    } else {
+                        items(likedSongs) { song ->
+                            val isDownloaded = remember(allSongs, song) {
+                                song.source == "DOWNLOADED" || allSongs.any {
+                                    (it.id == song.id && it.id > 0) ||
+                                    (it.filePath == song.filePath && song.filePath.isNotBlank()) ||
+                                    (it.title.equals(song.title, ignoreCase = true) && it.artist.equals(song.artist, ignoreCase = true) && (it.source == "DOWNLOADED" || it.filePath.contains("/downloads/")))
+                                }
+                            }
+                            OnlineTrackRow(
+                                song = song,
+                                themeConfig = themeConfig,
+                                isDownloaded = isDownloaded,
+                                isLiked = true,
+                                downloadProgress = downloadStatusMap[song.id],
+                                onPlayClick = { onPlayTrack(song) },
+                                onToggleLike = { onToggleLike(song) },
+                                onAddToPlaylistClick = { selectedSongForPlaylist = song },
+                                onDownloadClick = { onDownloadSong(song) }
+                            )
+                        }
+                    }
+                }
+
+                "PLAYLISTS" -> {
+                    item {
+                        LiquidGlassCard(
+                            themeConfig = themeConfig,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            cornerRadius = 16.dp,
+                            onClick = { showCreatePlaylistDialog = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(accentColor.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Create",
+                                        tint = accentColor,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Text(
+                                        text = "+ Create Custom Playlist",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Group YouTube audio, Audius tracks, & online streams",
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (playlists.isEmpty()) {
+                        item {
+                            EmptyStatePlaceholder(
+                                title = "No Playlists Found",
+                                description = "Create your first custom playlist above to group online and local audio tracks together.",
+                                icon = Icons.Default.QueueMusic,
+                                accentColor = accentColor
+                            )
+                        }
+                    } else {
+                        items(playlists) { playlist ->
+                            LiquidGlassCard(
+                                themeConfig = themeConfig,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                cornerRadius = 18.dp,
+                                onClick = { onPlaylistClick(playlist) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.QueueMusic,
+                                        contentDescription = "Playlist",
+                                        tint = accentColor,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = playlist.name,
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = playlist.description ?: "Online Playlist",
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Open Playlist",
+                                        tint = accentColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -499,6 +684,8 @@ fun OnlineTrackRow(
     song: Song,
     themeConfig: ThemeConfig,
     isRadio: Boolean = false,
+    isDownloaded: Boolean = false,
+    isLiked: Boolean = false,
     downloadProgress: Float? = null,
     onPlayClick: () -> Unit,
     onToggleLike: () -> Unit = {},
@@ -506,6 +693,8 @@ fun OnlineTrackRow(
     onDownloadClick: () -> Unit = {}
 ) {
     val accentColor = getThemeAccentColor(themeConfig)
+    val context = LocalContext.current
+    val effectiveLiked = isLiked || song.isLiked
 
     LiquidGlassCard(
         modifier = Modifier
@@ -586,9 +775,9 @@ fun OnlineTrackRow(
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = if (song.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        imageVector = if (effectiveLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "Like Song",
-                        tint = if (song.isLiked) Color.Red else Color.White.copy(alpha = 0.7f),
+                        tint = if (effectiveLiked) Color.Red else Color.White.copy(alpha = 0.7f),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -608,7 +797,21 @@ fun OnlineTrackRow(
 
                 // Download Button / Progress
                 if (!isRadio) {
-                    if (downloadProgress != null) {
+                    if (isDownloaded || song.source == "DOWNLOADED") {
+                        IconButton(
+                            onClick = {
+                                Toast.makeText(context, "'${song.title}' is saved in your Offline Downloads!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Downloaded",
+                                tint = accentColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    } else if (downloadProgress != null) {
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -617,10 +820,10 @@ fun OnlineTrackRow(
                         ) {
                             if (downloadProgress >= 1.0f) {
                                 Icon(
-                                    imageVector = Icons.Default.Check,
+                                    imageVector = Icons.Default.CheckCircle,
                                     contentDescription = "Downloaded",
                                     tint = accentColor,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             } else {
                                 CircularProgressIndicator(
@@ -637,9 +840,9 @@ fun OnlineTrackRow(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = if (song.source == "DOWNLOADED") Icons.Default.Check else Icons.Default.Download,
+                                imageVector = Icons.Default.Download,
                                 contentDescription = "Download Song",
-                                tint = if (song.source == "DOWNLOADED") accentColor else Color.White.copy(alpha = 0.7f),
+                                tint = Color.White.copy(alpha = 0.8f),
                                 modifier = Modifier.size(18.dp)
                             )
                         }

@@ -373,7 +373,7 @@ fun SettingsScreen(
 
             LiquidGlassCard(themeConfig = themeConfig, modifier = Modifier.fillMaxWidth(), cornerRadius = 20.dp) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Silence & Pre-Music Cut
+                    // Pure Direct Playback
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -382,13 +382,14 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Silence & Pre-Music Intro Cut", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text("Automatically strip leading intro silence and track gap padding", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                            Text("Literal First-MS Direct Playback", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Plays every track from literal 0ms without trimming or pre-cutting audio", color = Color(0xFF94A3B8), fontSize = 12.sp)
                         }
-                        Switch(
-                            checked = themeConfig.gaplessEnabled,
-                            onCheckedChange = { onToggleGapless?.invoke(it) },
-                            colors = SwitchDefaults.colors(checkedThumbColor = accentColor, checkedTrackColor = accentColor.copy(alpha = 0.3f))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Active",
+                            tint = accentColor,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
@@ -507,23 +508,34 @@ fun SettingsScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color(0x1FFFFFFF))
 
-                    // Online Pre-Music Cut Toggle
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Trim Silence / Pre-Music Intro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text("Cut leading silence & pre-music intro gaps before online playback starts", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                    // Google Account & YouTube Auth Status
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Google Account / YouTube Access", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Full YouTube & Audius audio streams run free & anonymously without requiring a Google login.", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                            }
                         }
-                        Switch(
-                            checked = themeConfig.gaplessEnabled,
-                            onCheckedChange = { onToggleGapless?.invoke(it) },
-                            colors = SwitchDefaults.colors(checkedThumbColor = accentColor, checkedTrackColor = accentColor.copy(alpha = 0.3f))
-                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://accounts.google.com/"))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(alpha = 0.2f), contentColor = Color.White),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Google", tint = accentColor)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Google Account Connected (Anonymous Direct Stream)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
