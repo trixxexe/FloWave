@@ -42,6 +42,10 @@ class PlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var sleepTimerJob: Job? = null
 
+    private val youtubeRepo by lazy { com.trixxexe.trixxwave.data.api.YoutubeStreamRepository(this) }
+    private var streamRetryCount = 0
+    private var lastFailedMediaId: String? = null
+
     inner class LocalBinder : Binder() {
         fun getService(): PlaybackService = this@PlaybackService
     }
@@ -137,6 +141,54 @@ class PlaybackService : MediaSessionService() {
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 android.util.Log.e("PlaybackService", "ExoPlayer error [code=${error.errorCodeName}]: ${error.message}", error)
+                val p = player ?: return
+                val currentItem = p.currentMediaItem
+                val mediaId = currentItem?.mediaId
+                val currentPos = p.currentPosition
+
+                if (mediaId != null && (mediaId != lastFailedMediaId)) {
+                    lastFailedMediaId = mediaId
+                    streamRetryCount = 0
+                }
+
+                if (mediaId != null && streamRetryCount < 3) {
+                    streamRetryCount++
+                    android.util.Log.d("PlaybackService", "Attempting automatic stream URL refresh for mediaId=$mediaId, attempt=$streamRetryCount at pos=${currentPos}ms")
+                    
+                    val metadata = currentItem.mediaMetadata
+                    val title = metadata.title?.toString()
+                    val artist = metadata.artist?.toString()
+                    val originalUri = currentItem.requestMetadata.mediaUri?.toString() ?: currentItem.localConfiguration?.uri?.toString() ?: ""
+
+                    serviceScope.launch(Dispatchers.IO) {
+                        val refreshedResult = youtubeRepo.extractAudioStream(
+                            urlOrQuery = originalUri.ifBlank { title ?: mediaId },
+                            songTitle = title,
+                            songArtist = artist,
+                            forceRefresh = true
+                        )
+
+                        if (refreshedResult != null && refreshedResult.streamUrl.isNotBlank()) {
+                            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                try {
+                                    val newUri = android.net.Uri.parse(refreshedResult.streamUrl)
+                                    val updatedItem = currentItem.buildUpon()
+                                        .setUri(newUri)
+                                        .build()
+
+                                    val currentIndex = p.currentMediaItemIndex
+                                    p.replaceMediaItem(currentIndex, updatedItem)
+                                    p.seekTo(currentIndex, currentPos)
+                                    p.prepare()
+                                    p.play()
+                                    android.util.Log.d("PlaybackService", "Playback recovered seamlessly with refreshed streamUrl: ${refreshedResult.streamUrl.take(60)}...")
+                                } catch (e: Throwable) {
+                                    android.util.Log.e("PlaybackService", "Failed to apply refreshed media item: ${e.message}")
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         playerListener = listener

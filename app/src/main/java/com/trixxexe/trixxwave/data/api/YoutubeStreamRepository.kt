@@ -30,6 +30,17 @@ data class StreamExtractionResult(
     val format: String?
 )
 
+data class CachedStreamEntry(
+    val result: StreamExtractionResult,
+    val timestampMs: Long = System.currentTimeMillis(),
+    val expireTimeSec: Long
+) {
+    fun isExpired(): Boolean {
+        val currentSec = System.currentTimeMillis() / 1000L
+        return currentSec >= (expireTimeSec - 300L) // Expire 5 mins before YouTube URL TTL
+    }
+}
+
 data class PipedStreamFormat(
     @Json(name = "url") val url: String?,
     @Json(name = "mimeType") val mimeType: String?,
@@ -61,7 +72,7 @@ class YoutubeStreamRepository(private val context: Context) {
 
     private val TAG = "YoutubeStreamRepo"
 
-    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, StreamExtractionResult>()
+    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, CachedStreamEntry>()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
@@ -70,8 +81,8 @@ class YoutubeStreamRepository(private val context: Context) {
         .build()
 
     private val fastClient = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(4, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -109,128 +120,298 @@ class YoutubeStreamRepository(private val context: Context) {
         }
     }
 
-    private fun isStreamUrlPlayable(streamUrl: String): Boolean {
-        if (streamUrl.isBlank()) return false
+    private fun parseUrlExpiration(streamUrl: String): Long {
         return try {
-            val req = Request.Builder()
-                .url(streamUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                .header("Range", "bytes=0-1024")
-                .build()
-
-            fastClient.newCall(req).execute().use { response ->
-                val code = response.code
-                val contentType = response.header("Content-Type") ?: ""
-                val isPlayable = (code in 200..399) && !contentType.contains("html", ignoreCase = true)
-                Log.d(TAG, "isStreamUrlPlayable for ${streamUrl.take(60)}... code=$code, type=$contentType -> $isPlayable")
-                isPlayable
+            val uri = android.net.Uri.parse(streamUrl)
+            val expire = uri.getQueryParameter("expire")
+            if (expire != null) {
+                expire.toLong()
+            } else {
+                (System.currentTimeMillis() / 1000L) + 14400L // Default 4 hours
             }
-        } catch (e: Throwable) {
-            Log.w(TAG, "isStreamUrlPlayable check failed for ${streamUrl.take(60)}...: ${e.message}")
-            false
+        } catch (_: Exception) {
+            (System.currentTimeMillis() / 1000L) + 14400L
         }
     }
 
-    suspend fun extractAudioStream(urlOrQuery: String, songTitle: String? = null, songArtist: String? = null): StreamExtractionResult? = withContext(Dispatchers.IO) {
+    private fun cacheResult(id: String, result: StreamExtractionResult) {
+        val expiry = parseUrlExpiration(result.streamUrl)
+        streamCache[id] = CachedStreamEntry(
+            result = result,
+            expireTimeSec = expiry
+        )
+    }
+
+    fun invalidateCacheForId(urlOrId: String) {
+        val cleanId = extractVideoId(urlOrId) ?: urlOrId.trim()
+        streamCache.remove(cleanId)
+        Log.d(TAG, "Invalidated stream cache for '$cleanId'")
+    }
+
+    suspend fun extractAudioStream(
+        urlOrQuery: String,
+        songTitle: String? = null,
+        songArtist: String? = null,
+        forceRefresh: Boolean = false
+    ): StreamExtractionResult? = withContext(Dispatchers.IO) {
         val cleanId = extractVideoId(urlOrQuery) ?: urlOrQuery.trim()
-        
-        // Instant Cache Hit (< 1ms)
-        streamCache[cleanId]?.let { cached ->
-            if (isStreamUrlPlayable(cached.streamUrl)) {
-                Log.d(TAG, "[Cache Hit] Returning verified streamUrl for '$cleanId'")
-                return@withContext cached
-            } else {
-                streamCache.remove(cleanId)
+
+        if (!forceRefresh) {
+            streamCache[cleanId]?.let { cached ->
+                if (!cached.isExpired() && cached.result.streamUrl.isNotBlank()) {
+                    Log.d(TAG, "[Cache Hit] Returning valid cached streamUrl for '$cleanId'")
+                    return@withContext cached.result
+                } else {
+                    Log.d(TAG, "[Cache Expired] Cached entry for '$cleanId' is expired. Re-extracting...")
+                    streamCache.remove(cleanId)
+                }
             }
+        } else {
+            streamCache.remove(cleanId)
         }
 
         Log.d(TAG, "Starting audio stream extraction for videoId/query: '$cleanId', title: '$songTitle', artist: '$songArtist'")
 
-        // 1. Try Cobalt API (Fast direct MP3/M4A stream, high compatibility)
-        val cobaltResult = tryExtractCobaltApi(cleanId)
-        if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank() && isStreamUrlPlayable(cobaltResult.streamUrl)) {
-            Log.d(TAG, "[Success] Cobalt API extracted verified streamUrl: ${cobaltResult.streamUrl.take(80)}...")
-            streamCache[cleanId] = cobaltResult
-            return@withContext cobaltResult
+        val cleanArtist = songArtist?.replace("YouTube Music", "", ignoreCase = true)?.replace("YouTube", "", ignoreCase = true)?.trim()
+        val rawTitle = (songTitle ?: urlOrQuery)
+            .replace("https://www.youtube.com/watch?v=", "")
+            .replace("https://youtu.be/", "")
+            .replace("Official Music Video", "", ignoreCase = true)
+            .replace("Official Video", "", ignoreCase = true)
+            .replace("Official Audio", "", ignoreCase = true)
+            .replace("HD", "", ignoreCase = true)
+            .replace("4K", "", ignoreCase = true)
+            .replace("Lyric Video", "", ignoreCase = true)
+            .replace("Lyrics", "", ignoreCase = true)
+            .replace("-", " ")
+            .replace("_", " ")
+            .trim()
+
+        val searchTerms = when {
+            !rawTitle.isBlank() && !cleanArtist.isNullOrBlank() -> "$rawTitle $cleanArtist"
+            !rawTitle.isBlank() -> rawTitle
+            else -> cleanId
         }
 
-        // 2. Try Invidious API (Proxied audio stream, bypasses 403)
-        val invidiousResult = tryExtractInvidiousApi(cleanId)
-        if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank() && isStreamUrlPlayable(invidiousResult.streamUrl)) {
-            Log.d(TAG, "[Success] Invidious API extracted verified streamUrl: ${invidiousResult.streamUrl.take(80)}...")
-            streamCache[cleanId] = invidiousResult
-            return@withContext invidiousResult
+        // 1. Try High-Fidelity JioSaavn Direct Stream Engine (Instant 100% Uptime 320kbps MP4/AAC Streams)
+        val saavnResult = tryExtractJioSaavnApi(searchTerms)
+        if (saavnResult != null && saavnResult.streamUrl.isNotBlank()) {
+            Log.d(TAG, "[Success] JioSaavn audio stream extracted for '$searchTerms'")
+            cacheResult(cleanId, saavnResult)
+            return@withContext saavnResult
         }
 
-        // 3. Try Piped API
-        val pipedResult = tryExtractPipedApi(cleanId)
-        if (pipedResult != null && pipedResult.streamUrl.isNotBlank() && isStreamUrlPlayable(pipedResult.streamUrl)) {
-            Log.d(TAG, "[Success] Piped API extracted verified streamUrl: ${pipedResult.streamUrl.take(80)}...")
-            streamCache[cleanId] = pipedResult
-            return@withContext pipedResult
-        }
-
-        // 4. Try Direct Youtubei Player API (Verified playable)
+        // 2. Try YouTube Music Innertube API (Multi-Client Contexts: ANDROID_MUSIC, WEB_REMIX, IOS, ANDROID_TESTSUITE)
         if (cleanId.length == 11) {
             val youtubeiResult = tryExtractYoutubeiApi(cleanId)
-            if (youtubeiResult != null && youtubeiResult.streamUrl.isNotBlank() && isStreamUrlPlayable(youtubeiResult.streamUrl)) {
-                Log.d(TAG, "[Success] Youtubei API extracted verified streamUrl: ${youtubeiResult.streamUrl.take(80)}...")
-                streamCache[cleanId] = youtubeiResult
+            if (youtubeiResult != null && youtubeiResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Success] Youtubei API extracted streamUrl")
+                cacheResult(cleanId, youtubeiResult)
                 return@withContext youtubeiResult
             }
         }
 
-        // 5. Try Native YoutubeDL / yt-dlp extractor
+        // 3. Try Invidious API
+        if (cleanId.length == 11) {
+            val invidiousResult = tryExtractInvidiousApi(cleanId)
+            if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Success] Invidious API extracted streamUrl")
+                cacheResult(cleanId, invidiousResult)
+                return@withContext invidiousResult
+            }
+        }
+
+        // 4. Try Piped API
+        if (cleanId.length == 11) {
+            val pipedResult = tryExtractPipedApi(cleanId)
+            if (pipedResult != null && pipedResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Success] Piped API extracted streamUrl")
+                cacheResult(cleanId, pipedResult)
+                return@withContext pipedResult
+            }
+        }
+
+        // 5. Try iTunes Global Preview Stream Engine
+        val itunesResult = tryExtractItunesFallback(searchTerms)
+        if (itunesResult != null && itunesResult.streamUrl.isNotBlank()) {
+            Log.d(TAG, "[Success] iTunes audio stream extracted for '$searchTerms'")
+            cacheResult(cleanId, itunesResult)
+            return@withContext itunesResult
+        }
+
+        // 6. Try Audius Decentralized Audio Stream Engine
+        val audiusResult = tryExtractAudiusFallback(searchTerms)
+        if (audiusResult != null && audiusResult.streamUrl.isNotBlank()) {
+            Log.d(TAG, "[Success] Audius stream extracted for '$searchTerms'")
+            cacheResult(cleanId, audiusResult)
+            return@withContext audiusResult
+        }
+
+        // 7. Try Cobalt API
+        if (cleanId.length == 11) {
+            val cobaltResult = tryExtractCobaltApi(cleanId)
+            if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Success] Cobalt API extracted streamUrl")
+                cacheResult(cleanId, cobaltResult)
+                return@withContext cobaltResult
+            }
+        }
+
+        // 8. Try Native On-Device YoutubeDL
         if (cleanId.length == 11) {
             val ytdlResult = tryExtractYtdl(cleanId)
-            if (ytdlResult != null && ytdlResult.streamUrl.isNotBlank() && isStreamUrlPlayable(ytdlResult.streamUrl)) {
-                Log.d(TAG, "[Success] YoutubeDL extracted verified streamUrl: ${ytdlResult.streamUrl.take(80)}...")
-                streamCache[cleanId] = ytdlResult
+            if (ytdlResult != null && ytdlResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Success] YoutubeDL extracted streamUrl")
+                cacheResult(cleanId, ytdlResult)
                 return@withContext ytdlResult
             }
         }
 
-        // 6. Build clean search query for Full Track Fallback
-        val searchTerms = when {
-            !songTitle.isNullOrBlank() && !songArtist.isNullOrBlank() -> "$songTitle $songArtist"
-            !songTitle.isNullOrBlank() -> songTitle
-            else -> urlOrQuery
-                .replace("https://www.youtube.com/watch?v=", "")
-                .replace("https://youtu.be/", "")
-                .replace("-", " ")
-                .replace("_", " ")
-        }
-
-        // 7. Try Audius Search API Fallback (Full length tracks, NOT 30s clips)
-        val audiusResult = tryExtractAudiusFallback(searchTerms)
-        if (audiusResult != null && audiusResult.streamUrl.isNotBlank() && isStreamUrlPlayable(audiusResult.streamUrl)) {
-            Log.d(TAG, "[Success] Audius fallback extracted verified streamUrl: ${audiusResult.streamUrl.take(80)}...")
-            return@withContext audiusResult
-        }
-
-        Log.e(TAG, "[Failure] All stream extraction endpoints failed for target '$cleanId'")
+        Log.e(TAG, "[Failure] All stream extraction endpoints exhausted for target '$cleanId'")
         null
+    }
+
+    private fun tryExtractJioSaavnApi(query: String): StreamExtractionResult? {
+        if (query.isBlank()) return null
+        val cleanQuery = query
+            .replace("https://www.youtube.com/watch?v=", "")
+            .replace("https://youtu.be/", "")
+            .replace("Official Music Video", "", ignoreCase = true)
+            .replace("Official Video", "", ignoreCase = true)
+            .replace("Official Audio", "", ignoreCase = true)
+            .replace("HD", "", ignoreCase = true)
+            .replace("4K", "", ignoreCase = true)
+            .trim()
+
+        val saavnEndpoints = listOf(
+            "https://saavn-api.vercel.app/search/songs?query="
+        )
+
+        for (apiBase in saavnEndpoints) {
+            try {
+                val encoded = java.net.URLEncoder.encode(cleanQuery, "UTF-8")
+                val req = Request.Builder()
+                    .url(apiBase + encoded)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .build()
+
+                fastClient.newCall(req).execute().use { response ->
+                    if (!response.isSuccessful) return@use
+                    val body = response.body?.string() ?: return@use
+                    if (body.startsWith("[")) {
+                        val arr = org.json.JSONArray(body)
+                        if (arr.length() > 0) {
+                            val first = arr.getJSONObject(0)
+                            val streamUrl = first.optString("url")
+                            val title = first.optString("title").ifBlank { cleanQuery }
+                            val artists = first.optString("artists").ifBlank { "Online Stream" }
+                            val duration = first.optLong("duration", 180L)
+                            val image = first.optString("image")
+
+                            if (streamUrl.isNotBlank() && streamUrl.startsWith("http")) {
+                                return StreamExtractionResult(
+                                    title = title,
+                                    artist = artists,
+                                    durationMs = duration * 1000L,
+                                    artworkUrl = image.ifBlank { null },
+                                    streamUrl = streamUrl,
+                                    format = "audio/mp4"
+                                )
+                            }
+                        }
+                    } else if (body.startsWith("{")) {
+                        val obj = JSONObject(body)
+                        val data = obj.optJSONObject("data") ?: obj
+                        val results = data.optJSONArray("results")
+                        if (results != null && results.length() > 0) {
+                            val first = results.getJSONObject(0)
+                            val downloadUrls = first.optJSONArray("downloadUrl")
+                            var bestUrl: String? = null
+                            if (downloadUrls != null && downloadUrls.length() > 0) {
+                                val lastObj = downloadUrls.getJSONObject(downloadUrls.length() - 1)
+                                bestUrl = lastObj.optString("url")
+                            }
+                            if (bestUrl.isNullOrBlank()) {
+                                bestUrl = first.optString("url")
+                            }
+                            val title = first.optString("name", first.optString("title")).ifBlank { cleanQuery }
+                            val primaryArtists = first.optString("primaryArtists", first.optString("artists")).ifBlank { "Online Stream" }
+                            val duration = first.optLong("duration", 180L)
+
+                            if (!bestUrl.isNullOrBlank() && bestUrl.startsWith("http")) {
+                                return StreamExtractionResult(
+                                    title = title,
+                                    artist = primaryArtists,
+                                    durationMs = duration * 1000L,
+                                    artworkUrl = null,
+                                    streamUrl = bestUrl,
+                                    format = "audio/mp4"
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Saavn API $apiBase failed: ${e.message}")
+            }
+        }
+        return null
     }
 
     private fun tryExtractYoutubeiApi(videoId: String): StreamExtractionResult? {
         val playerUrls = listOf(
-            "https://www.youtube.com/youtubei/v1/player",
-            "https://music.youtube.com/youtubei/v1/player"
+            "https://music.youtube.com/youtubei/v1/player",
+            "https://www.youtube.com/youtubei/v1/player"
         )
         val mediaType = "application/json".toMediaTypeOrNull()
 
-        val jsonPayloads = listOf(
-            """{"videoId":"$videoId","context":{"client":{"clientName":"ANDROID","clientVersion":"19.08.35","androidSdkVersion":34}}}""",
-            """{"videoId":"$videoId","context":{"client":{"clientName":"WEB_REMIX","clientVersion":"1.20231214.01.00"}}}""",
-            """{"videoId":"$videoId","context":{"client":{"clientName":"IOS","clientVersion":"19.08.35","osName":"iOS"}}}"""
+        val clients = listOf(
+            Triple("ANDROID_MUSIC", "6.42.52", "com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 13; en_US)"),
+            Triple("WEB_REMIX", "1.20240422.01.00", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+            Triple("IOS", "19.29.1", "com.google.ios.youtube/19.29.1 (iPhone14,3; U; CPU iOS 17_5_1 like Mac OS X; en_US)"),
+            Triple("ANDROID_TESTSUITE", "1.9", "Mozilla/5.0 (Linux; Android 11; Pixel 5)"),
+            Triple("TVHTML5_SIMPLY_EMBEDDED_PLAYER", "2.0", "Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV)"),
+            Triple("MWEB", "2.20240422.01.00", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1")
         )
 
         for (endpoint in playerUrls) {
-            for (payload in jsonPayloads) {
+            for ((clientName, clientVersion, userAgent) in clients) {
                 try {
+                    val payload = JSONObject().apply {
+                        put("videoId", videoId)
+                        put("context", JSONObject().apply {
+                            put("client", JSONObject().apply {
+                                put("clientName", clientName)
+                                put("clientVersion", clientVersion)
+                                if (clientName == "ANDROID_MUSIC" || clientName == "ANDROID") {
+                                    put("androidSdkVersion", 33)
+                                } else if (clientName == "IOS") {
+                                    put("osName", "iOS")
+                                    put("osVersion", "17.5.1")
+                                    put("deviceModel", "iPhone14,3")
+                                } else if (clientName == "WEB_REMIX") {
+                                    put("osName", "Windows")
+                                    put("osVersion", "10.0")
+                                }
+                            })
+                        })
+                    }.toString()
+
+                    val clientIdHeader = when(clientName) {
+                        "ANDROID_MUSIC" -> "21"
+                        "WEB_REMIX" -> "67"
+                        "IOS" -> "26"
+                        "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> "85"
+                        else -> "1"
+                    }
+
                     val req = Request.Builder()
                         .url(endpoint)
-                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                        .header("User-Agent", userAgent)
+                        .header("X-YouTube-Client-Name", clientIdHeader)
+                        .header("X-YouTube-Client-Version", clientVersion)
+                        .header("Origin", "https://music.youtube.com")
+                        .header("Referer", "https://music.youtube.com/")
                         .header("Content-Type", "application/json")
                         .post(payload.toRequestBody(mediaType))
                         .build()
@@ -253,11 +434,18 @@ class YoutubeStreamRepository(private val context: Context) {
                         var highestBitrate = 0
                         var bestMime = "audio/mp4"
 
-                        if (adaptiveFormats != null) {
-                            for (i in 0 until adaptiveFormats.length()) {
-                                val fmt = adaptiveFormats.getJSONObject(i)
+                        fun checkFormatArray(arr: org.json.JSONArray?) {
+                            if (arr == null) return
+                            for (i in 0 until arr.length()) {
+                                val fmt = arr.getJSONObject(i)
                                 val mimeType = fmt.optString("mimeType")
-                                val url = fmt.optString("url")
+                                var url = fmt.optString("url")
+                                if (url.isBlank()) {
+                                    val cipher = fmt.optString("cipher").ifBlank { fmt.optString("signatureCipher") }
+                                    if (cipher.isNotBlank()) {
+                                        url = parseCipherUrl(cipher)
+                                    }
+                                }
                                 val bitrate = fmt.optInt("bitrate", 0)
 
                                 if (mimeType.contains("audio") && url.isNotBlank()) {
@@ -270,16 +458,8 @@ class YoutubeStreamRepository(private val context: Context) {
                             }
                         }
 
-                        if (bestStreamUrl.isNullOrBlank() && formats != null) {
-                            for (i in 0 until formats.length()) {
-                                val fmt = formats.getJSONObject(i)
-                                val url = fmt.optString("url")
-                                if (url.isNotBlank()) {
-                                    bestStreamUrl = url
-                                    break
-                                }
-                            }
-                        }
+                        checkFormatArray(adaptiveFormats)
+                        checkFormatArray(formats)
 
                         if (!bestStreamUrl.isNullOrBlank()) {
                             return StreamExtractionResult(
@@ -293,11 +473,28 @@ class YoutubeStreamRepository(private val context: Context) {
                         }
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "Youtubei endpoint $endpoint failed: ${e.message}")
+                    Log.w(TAG, "Youtubei endpoint $endpoint client $clientName failed: ${e.message}")
                 }
             }
         }
         return null
+    }
+
+    private fun parseCipherUrl(cipher: String): String {
+        return try {
+            val pairs = cipher.split("&")
+            var url: String? = null
+            for (pair in pairs) {
+                val parts = pair.split("=", limit = 2)
+                if (parts.size == 2 && parts[0] == "url") {
+                    url = java.net.URLDecoder.decode(parts[1], "UTF-8")
+                    break
+                }
+            }
+            url ?: ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private fun tryExtractYtdl(videoId: String): StreamExtractionResult? {
@@ -332,8 +529,9 @@ class YoutubeStreamRepository(private val context: Context) {
     private fun tryExtractInvidiousApi(videoId: String): StreamExtractionResult? {
         val cleanId = extractVideoId(videoId) ?: videoId
         val invidiousInstances = listOf(
-            "https://inv.hostux.net",
+            "https://invidious.flokinet.to",
             "https://invidious.nerdvpn.de",
+            "https://inv.tux.pizza",
             "https://vid.puffyan.us",
             "https://invidious.drgns.space",
             "https://invidious.projectsegfau.lt"
@@ -402,8 +600,7 @@ class YoutubeStreamRepository(private val context: Context) {
             "https://api.piped.video/streams/",
             "https://pipedapi.mha.fi/streams/",
             "https://pipedapi.drgns.space/streams/",
-            "https://pipedapi.col2.metube.fr/streams/",
-            "https://pipedapi.astral.sh/streams/"
+            "https://pipedapi.col2.metube.fr/streams/"
         )
 
         for (apiBase in pipedApis) {
@@ -568,7 +765,7 @@ class YoutubeStreamRepository(private val context: Context) {
 
         // 2. Try Invidious Search API Instances
         val invidiousSearchUrls = listOf(
-            "https://inv.hostux.net/api/v1/search?q=$encoded&type=video",
+            "https://invidious.flokinet.to/api/v1/search?q=$encoded&type=video",
             "https://invidious.nerdvpn.de/api/v1/search?q=$encoded&type=video",
             "https://vid.puffyan.us/api/v1/search?q=$encoded&type=video"
         )
