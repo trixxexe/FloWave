@@ -396,6 +396,8 @@ class MainActivity : ComponentActivity() {
                                     onSaveAiConfig = { cfg -> settingsViewModel.saveAiConfig(cfg) },
                                     onTestAiConnection = { settingsViewModel.testAiConnection() },
                                     onSelectPreset = { preset -> settingsViewModel.updateThemePreset(preset) },
+                                    onSetThemeMode = { mode -> settingsViewModel.setThemeMode(mode) },
+                                    onSetBlurIntensity = { intensity -> settingsViewModel.setBlurIntensity(intensity) },
                                     onSetPrimaryColor = { hex -> settingsViewModel.setPrimaryColor(hex) },
                                     onSetAccentColor = { hex -> settingsViewModel.setAccentColor(hex) },
                                     onSetCustomBgUri = { uri -> settingsViewModel.setCustomBgUri(uri) },

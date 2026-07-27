@@ -268,6 +268,18 @@ class ThemePreferencesRepository(private val context: Context) {
         }
     }
 
+    suspend fun setThemeMode(mode: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.MODE] = mode
+        }
+    }
+
+    suspend fun setBlurIntensity(intensity: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.BLUR_INTENSITY] = intensity
+        }
+    }
+
     suspend fun setAccentColor(hex: String) {
         context.dataStore.edit { prefs ->
             prefs[PreferenceKeys.ACCENT_COLOR] = hex

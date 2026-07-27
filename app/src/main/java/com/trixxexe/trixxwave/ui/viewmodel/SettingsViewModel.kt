@@ -114,6 +114,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun setThemeMode(mode: String) {
+        viewModelScope.launch {
+            themeRepo.setThemeMode(mode)
+        }
+    }
+
+    fun setBlurIntensity(intensity: Float) {
+        viewModelScope.launch {
+            themeRepo.setBlurIntensity(intensity)
+        }
+    }
+
     fun setPrimaryColor(hex: String) {
         viewModelScope.launch {
             themeRepo.setPrimaryColor(hex)

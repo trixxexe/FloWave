@@ -15,15 +15,16 @@ import androidx.core.view.WindowCompat
 import com.trixxexe.trixxwave.data.preferences.ThemeConfig
 
 private val DarkColorScheme = darkColorScheme(
-    primary = WarmOrangeAccent,
+    primary = NeonCyan,
     secondary = SleekPurple,
-    tertiary = NeonPink,
-    background = GlassObsidianBackground,
-    surface = GlassObsidianSurface,
+    tertiary = AmberSunset,
+    background = SurfaceDarkCharcoal,
+    surface = SurfaceDarkCard,
     onPrimary = Color.Black,
     onSecondary = Color.White,
     onBackground = TextPrimaryDark,
-    onSurface = TextPrimaryDark
+    onSurface = TextPrimaryDark,
+    onSurfaceVariant = TextSecondaryDark
 )
 
 @Composable
@@ -37,8 +38,15 @@ fun TrixxWaveTheme(
         NeonCyan
     }
 
+    val isAmoled = themeConfig.mode == "AMOLED" || themeConfig.mode == "OLED Black"
+    val bgColor = if (isAmoled) SurfaceAmoledBlack else SurfaceDarkCharcoal
+    val surfaceColor = if (isAmoled) Color(0xFF0D0D0D) else SurfaceDarkCard
+
     val colorScheme = DarkColorScheme.copy(
-        primary = accentColor
+        primary = accentColor,
+        secondary = accentColor.copy(alpha = 0.8f),
+        background = bgColor,
+        surface = surfaceColor
     )
 
     val view = LocalView.current
