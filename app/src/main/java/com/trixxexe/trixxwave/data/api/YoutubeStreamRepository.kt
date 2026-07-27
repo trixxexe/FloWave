@@ -109,62 +109,88 @@ class YoutubeStreamRepository(private val context: Context) {
         }
     }
 
+    private fun isStreamUrlPlayable(streamUrl: String): Boolean {
+        if (streamUrl.isBlank()) return false
+        return try {
+            val req = Request.Builder()
+                .url(streamUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                .header("Range", "bytes=0-1024")
+                .build()
+
+            fastClient.newCall(req).execute().use { response ->
+                val code = response.code
+                val contentType = response.header("Content-Type") ?: ""
+                val isPlayable = (code in 200..399) && !contentType.contains("html", ignoreCase = true)
+                Log.d(TAG, "isStreamUrlPlayable for ${streamUrl.take(60)}... code=$code, type=$contentType -> $isPlayable")
+                isPlayable
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "isStreamUrlPlayable check failed for ${streamUrl.take(60)}...: ${e.message}")
+            false
+        }
+    }
+
     suspend fun extractAudioStream(urlOrQuery: String, songTitle: String? = null, songArtist: String? = null): StreamExtractionResult? = withContext(Dispatchers.IO) {
         val cleanId = extractVideoId(urlOrQuery) ?: urlOrQuery.trim()
         
         // Instant Cache Hit (< 1ms)
         streamCache[cleanId]?.let { cached ->
-            Log.d(TAG, "[Cache Hit] Instantly returning streamUrl for '$cleanId'")
-            return@withContext cached
+            if (isStreamUrlPlayable(cached.streamUrl)) {
+                Log.d(TAG, "[Cache Hit] Returning verified streamUrl for '$cleanId'")
+                return@withContext cached
+            } else {
+                streamCache.remove(cleanId)
+            }
         }
 
         Log.d(TAG, "Starting audio stream extraction for videoId/query: '$cleanId', title: '$songTitle', artist: '$songArtist'")
 
-        // 1. Try Direct Youtubei Player API
+        // 1. Try Cobalt API (Fast direct MP3/M4A stream, high compatibility)
+        val cobaltResult = tryExtractCobaltApi(cleanId)
+        if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank() && isStreamUrlPlayable(cobaltResult.streamUrl)) {
+            Log.d(TAG, "[Success] Cobalt API extracted verified streamUrl: ${cobaltResult.streamUrl.take(80)}...")
+            streamCache[cleanId] = cobaltResult
+            return@withContext cobaltResult
+        }
+
+        // 2. Try Invidious API (Proxied audio stream, bypasses 403)
+        val invidiousResult = tryExtractInvidiousApi(cleanId)
+        if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank() && isStreamUrlPlayable(invidiousResult.streamUrl)) {
+            Log.d(TAG, "[Success] Invidious API extracted verified streamUrl: ${invidiousResult.streamUrl.take(80)}...")
+            streamCache[cleanId] = invidiousResult
+            return@withContext invidiousResult
+        }
+
+        // 3. Try Piped API
+        val pipedResult = tryExtractPipedApi(cleanId)
+        if (pipedResult != null && pipedResult.streamUrl.isNotBlank() && isStreamUrlPlayable(pipedResult.streamUrl)) {
+            Log.d(TAG, "[Success] Piped API extracted verified streamUrl: ${pipedResult.streamUrl.take(80)}...")
+            streamCache[cleanId] = pipedResult
+            return@withContext pipedResult
+        }
+
+        // 4. Try Direct Youtubei Player API (Verified playable)
         if (cleanId.length == 11) {
             val youtubeiResult = tryExtractYoutubeiApi(cleanId)
-            if (youtubeiResult != null && youtubeiResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Youtubei API extracted streamUrl: ${youtubeiResult.streamUrl.take(80)}...")
+            if (youtubeiResult != null && youtubeiResult.streamUrl.isNotBlank() && isStreamUrlPlayable(youtubeiResult.streamUrl)) {
+                Log.d(TAG, "[Success] Youtubei API extracted verified streamUrl: ${youtubeiResult.streamUrl.take(80)}...")
                 streamCache[cleanId] = youtubeiResult
                 return@withContext youtubeiResult
             }
         }
 
-        // 2. Try Native YoutubeDL / yt-dlp extractor
+        // 5. Try Native YoutubeDL / yt-dlp extractor
         if (cleanId.length == 11) {
             val ytdlResult = tryExtractYtdl(cleanId)
-            if (ytdlResult != null && ytdlResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] YoutubeDL extracted streamUrl: ${ytdlResult.streamUrl.take(80)}...")
+            if (ytdlResult != null && ytdlResult.streamUrl.isNotBlank() && isStreamUrlPlayable(ytdlResult.streamUrl)) {
+                Log.d(TAG, "[Success] YoutubeDL extracted verified streamUrl: ${ytdlResult.streamUrl.take(80)}...")
                 streamCache[cleanId] = ytdlResult
                 return@withContext ytdlResult
             }
         }
 
-        // 3. Try Cobalt API (Fast direct stream)
-        val cobaltResult = tryExtractCobaltApi(cleanId)
-        if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] Cobalt API extracted streamUrl: ${cobaltResult.streamUrl.take(80)}...")
-            streamCache[cleanId] = cobaltResult
-            return@withContext cobaltResult
-        }
-
-        // 4. Try Piped API
-        val pipedResult = tryExtractPipedApi(cleanId)
-        if (pipedResult != null && pipedResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] Piped API extracted streamUrl: ${pipedResult.streamUrl.take(80)}...")
-            streamCache[cleanId] = pipedResult
-            return@withContext pipedResult
-        }
-
-        // 5. Try Invidious API
-        val invidiousResult = tryExtractInvidiousApi(cleanId)
-        if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] Invidious API extracted streamUrl: ${invidiousResult.streamUrl.take(80)}...")
-            streamCache[cleanId] = invidiousResult
-            return@withContext invidiousResult
-        }
-
-        // 6. Build clean search query for Audius Full Track Fallback
+        // 6. Build clean search query for Full Track Fallback
         val searchTerms = when {
             !songTitle.isNullOrBlank() && !songArtist.isNullOrBlank() -> "$songTitle $songArtist"
             !songTitle.isNullOrBlank() -> songTitle
@@ -177,8 +203,8 @@ class YoutubeStreamRepository(private val context: Context) {
 
         // 7. Try Audius Search API Fallback (Full length tracks, NOT 30s clips)
         val audiusResult = tryExtractAudiusFallback(searchTerms)
-        if (audiusResult != null && audiusResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] Audius fallback extracted streamUrl: ${audiusResult.streamUrl.take(80)}...")
+        if (audiusResult != null && audiusResult.streamUrl.isNotBlank() && isStreamUrlPlayable(audiusResult.streamUrl)) {
+            Log.d(TAG, "[Success] Audius fallback extracted verified streamUrl: ${audiusResult.streamUrl.take(80)}...")
             return@withContext audiusResult
         }
 

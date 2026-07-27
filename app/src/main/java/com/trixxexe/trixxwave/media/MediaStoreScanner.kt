@@ -122,6 +122,61 @@ object MediaStoreScanner {
         addedCount
     }
 
+    suspend fun scanCustomDirectory(context: Context, folderPath: String): Int = withContext(Dispatchers.IO) {
+        val dir = File(folderPath)
+        if (!dir.exists() || !dir.isDirectory) return@withContext 0
+
+        val database = TrixxWaveDatabase.getDatabase(context)
+        val songDao = database.songDao()
+        val existingPaths = songDao.getAllSongPaths().toHashSet()
+
+        val audioExtensions = setOf("mp3", "m4a", "wav", "flac", "ogg", "aac", "opus")
+        var addedCount = 0
+
+        try {
+            dir.walkTopDown()
+                .filter { file -> file.isFile && file.extension.lowercase() in audioExtensions }
+                .forEach { file ->
+                    val path = file.absolutePath
+                    if (!existingPaths.contains(path)) {
+                        val retriever = MediaMetadataRetriever()
+                        var title = file.nameWithoutExtension
+                        var artist = "Unknown Artist"
+                        var album = "Custom Folder"
+                        var durationMs = 180000L
+
+                        try {
+                            retriever.setDataSource(path)
+                            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)?.let { if (it.isNotBlank()) title = it }
+                            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)?.let { if (it.isNotBlank()) artist = it }
+                            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)?.let { if (it.isNotBlank()) album = it }
+                            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.let { durationMs = it }
+                        } catch (_: Exception) {} finally {
+                            try { retriever.release() } catch (_: Exception) {}
+                        }
+
+                        val waveform = WaveformExtractor.extractWaveformPoints(path)
+                        val song = Song(
+                            title = title,
+                            artist = artist,
+                            album = album,
+                            durationMs = durationMs,
+                            filePath = path,
+                            waveformPoints = waveform,
+                            dateAdded = System.currentTimeMillis()
+                        )
+                        songDao.insertSong(song)
+                        existingPaths.add(path)
+                        addedCount++
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error scanning custom directory $folderPath: ${e.message}", e)
+        }
+
+        addedCount
+    }
+
     private suspend fun ensureDemoTracks(songDao: com.trixxexe.trixxwave.data.db.SongDao) {
         if (songDao.getSongCount() > 0) return
         val demoSongs = listOf(

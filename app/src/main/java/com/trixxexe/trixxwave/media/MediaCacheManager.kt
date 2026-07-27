@@ -51,13 +51,9 @@ object MediaCacheManager {
     fun getCacheDataSourceFactory(context: Context): androidx.media3.datasource.DataSource.Factory {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+            .setConnectTimeoutMs(20000)
+            .setReadTimeoutMs(20000)
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-            .setDefaultRequestProperties(mapOf(
-                "Referer" to "https://www.youtube.com/",
-                "Origin" to "https://www.youtube.com"
-            ))
 
         val cache = getCache(context)
         val httpSourceFactory = if (cache != null) {

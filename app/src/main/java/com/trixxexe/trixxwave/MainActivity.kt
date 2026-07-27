@@ -194,7 +194,7 @@ class MainActivity : ComponentActivity() {
             }
             val playlistSongs by (playlistSongsFlow?.collectAsState(initial = emptyList()) ?: remember { mutableStateOf(emptyList<Song>()) })
 
-            LaunchedEffect(currentSong?.id, isPlaying, themeConfig.gaplessEnabled, isBound) {
+            LaunchedEffect(currentSong?.id, currentSong?.streamUrl, currentSong?.filePath, isPlaying, themeConfig.gaplessEnabled, isBound) {
                 val song = currentSong
                 if (song != null && isBound) {
                     if (isPlaying) {
@@ -387,7 +387,8 @@ class MainActivity : ComponentActivity() {
                                     onPlaylistClick = { pl -> selectedPlaylistForDetail = pl },
                                     onSongClick = { song -> mainViewModel.playSong(song) },
                                     onRescanLibrary = { settingsViewModel.rescanLibrary() },
-                                    onCreatePlaylist = { name, desc -> mainViewModel.createCustomPlaylist(name, desc) }
+                                    onCreatePlaylist = { name, desc -> mainViewModel.createCustomPlaylist(name, desc) },
+                                    onScanCustomFolder = { folder -> mainViewModel.scanCustomFolder(folder) }
                                 )
                             }
                             composable("settings") {

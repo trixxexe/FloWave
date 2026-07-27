@@ -141,6 +141,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun scanCustomFolder(folderPath: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val added = MediaStoreScanner.scanCustomDirectory(app, folderPath)
+            if (added > 0) {
+                autoTagAndProcessSongs()
+            }
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    app,
+                    if (added > 0) "Indexed $added new audio files from folder!" else "No new audio files found in selected directory.",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
     private fun registerStorageObserver() {
         if (contentObserver != null) return
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -314,15 +330,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun playSong(song: Song, queue: List<Song> = allSongs.value) {
-        if ((song.source == "YOUTUBE_EXTRACTED" || song.filePath.contains("youtube.com") || song.filePath.contains("youtu.be")) && song.streamUrl.isNullOrBlank()) {
-            android.util.Log.d("MainViewModel", "playSong intercepted YouTube track with blank streamUrl. Triggering extraction for: '${song.title}'")
-            extractAndPlayYoutubeUrl(song.originalUrl ?: song.filePath)
+        val localDownloadedCopy = allSongs.value.firstOrNull { 
+            (it.source == "DOWNLOADED" || (it.filePath.startsWith("/") && !it.filePath.startsWith("http"))) && 
+            it.title.equals(song.title, ignoreCase = true) && 
+            it.artist.equals(song.artist, ignoreCase = true) 
+        }
+        val targetSong = localDownloadedCopy ?: song
+
+        if ((targetSong.source == "YOUTUBE_EXTRACTED" || targetSong.filePath.contains("youtube.com") || targetSong.filePath.contains("youtu.be")) && targetSong.streamUrl.isNullOrBlank()) {
+            android.util.Log.d("MainViewModel", "playSong intercepted YouTube track with blank streamUrl. Triggering extraction for: '${targetSong.title}'")
+            extractAndPlayYoutubeUrl(targetSong.originalUrl ?: targetSong.filePath, targetSong.title, targetSong.artist)
             return
         }
 
-        android.util.Log.d("MainViewModel", "playSong setting currentSong: '${song.title}', streamUrl: ${song.streamUrl}, filePath: ${song.filePath}")
-        _currentSong.value = song
-        _playbackQueue.value = if (queue.isNotEmpty()) queue else listOf(song)
+        android.util.Log.d("MainViewModel", "playSong setting currentSong: '${targetSong.title}', streamUrl: ${targetSong.streamUrl}, filePath: ${targetSong.filePath}")
+        _currentSong.value = targetSong
+        _playbackQueue.value = if (queue.isNotEmpty()) queue else listOf(targetSong)
         _isPlaying.value = true
         _currentPositionMs.value = 0L
         savePlaybackStateToDataStore()
@@ -694,14 +717,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             try {
                 _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 0.05f)
-                var targetStreamUrl = song.streamUrl
-                if (targetStreamUrl.isNullOrBlank() && (song.source == "YOUTUBE_EXTRACTED" || song.filePath.contains("youtube.com") || song.filePath.contains("youtu.be"))) {
-                    val extracted = youtubeRepo.extractAudioStream(song.originalUrl ?: song.filePath, song.title, song.artist)
-                    targetStreamUrl = extracted?.streamUrl
-                }
-                if (targetStreamUrl.isNullOrBlank()) {
-                    targetStreamUrl = song.filePath
-                }
+                
+                // Extract a verified direct audio stream URL
+                val extracted = youtubeRepo.extractAudioStream(
+                    urlOrQuery = song.originalUrl ?: song.filePath,
+                    songTitle = song.title,
+                    songArtist = song.artist
+                )
+                val targetStreamUrl = extracted?.streamUrl ?: song.streamUrl ?: song.filePath
+
                 if (targetStreamUrl.isBlank() || targetStreamUrl.startsWith("/")) {
                     _downloadStatusMap.value = _downloadStatusMap.value - song.id
                     withContext(Dispatchers.Main) {
@@ -720,8 +744,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .build()
 
                 val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                     .followRedirects(true)
                     .followSslRedirects(true)
                     .build()
@@ -756,15 +780,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
+                // Verify downloaded file content (must be audio bytes, not HTML error pages)
+                if (!destFile.exists() || destFile.length() < 5000L) {
+                    destFile.delete()
+                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(app, "Downloaded file is invalid or corrupted. Please try again.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                val headerBytes = destFile.inputStream().use { input ->
+                    val buf = ByteArray(200)
+                    val n = input.read(buf)
+                    if (n > 0) String(buf, 0, n, Charsets.UTF_8) else ""
+                }
+                if (headerBytes.contains("<!DOCTYPE", ignoreCase = true) || headerBytes.contains("<html", ignoreCase = true) || headerBytes.contains("403 Forbidden", ignoreCase = true)) {
+                    destFile.delete()
+                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(app, "Download blocked by server. Trying alternate link...", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
                 val targetDbId = if (song.id < 0) 0L else song.id
                 val updatedSong = song.copy(
                     id = targetDbId,
                     filePath = destFile.absolutePath,
                     source = "DOWNLOADED",
-                    streamUrl = destFile.absolutePath
+                    streamUrl = destFile.absolutePath,
+                    albumArtUri = extracted?.artworkUrl ?: song.albumArtUri
                 )
                 
-                songDao.insertSong(updatedSong)
+                val insertedId = songDao.insertSong(updatedSong)
+                val finalSong = updatedSong.copy(id = if (insertedId > 0) insertedId else updatedSong.id)
+
+                val current = _currentSong.value
+                if (current != null && (current.id == song.id || (current.title.equals(song.title, ignoreCase = true) && current.artist.equals(song.artist, ignoreCase = true)))) {
+                    _currentSong.value = finalSong
+                }
 
                 _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 1.0f)
                 withContext(Dispatchers.Main) {
