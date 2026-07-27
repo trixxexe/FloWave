@@ -288,6 +288,62 @@ fun SettingsScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color(0x1FFFFFFF))
 
+                    // Custom Background Wallpaper Setter
+                    val wallpaperLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.GetContent()
+                    ) { uri: Uri? ->
+                        if (uri != null) {
+                            onSetCustomBgUri?.invoke(uri.toString())
+                        }
+                    }
+
+                    Column {
+                        Text("Custom Wallpaper Background", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Set any image from your gallery as the app liquid glass background", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = { wallpaperLauncher.launch("image/*") },
+                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                                shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Choose Photo", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+
+                            if (!themeConfig.customBgUri.isNullOrBlank()) {
+                                OutlinedButton(
+                                    onClick = { onSetCustomBgUri?.invoke(null) },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = null,
+                                        tint = Color.Red,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Remove Wallpaper", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color(0x1FFFFFFF))
+
                     // Glass Blur Intensity Slider
                     Column {
                         Row(
@@ -317,7 +373,7 @@ fun SettingsScreen(
 
             LiquidGlassCard(themeConfig = themeConfig, modifier = Modifier.fillMaxWidth(), cornerRadius = 20.dp) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Gapless Audio Playback
+                    // Silence & Pre-Music Cut
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -326,8 +382,8 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Gapless Audio Engine", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text("Automatically strip leading/trailing silence between songs", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                            Text("Silence & Pre-Music Intro Cut", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Automatically strip leading intro silence and track gap padding", color = Color(0xFF94A3B8), fontSize = 12.sp)
                         }
                         Switch(
                             checked = themeConfig.gaplessEnabled,
@@ -447,6 +503,27 @@ fun SettingsScreen(
                         if (idx < sources.size - 1) {
                             HorizontalDivider(color = Color(0x1FFFFFFF), modifier = Modifier.padding(vertical = 4.dp))
                         }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color(0x1FFFFFFF))
+
+                    // Online Pre-Music Cut Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Trim Silence / Pre-Music Intro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Cut leading silence & pre-music intro gaps before online playback starts", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = themeConfig.gaplessEnabled,
+                            onCheckedChange = { onToggleGapless?.invoke(it) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = accentColor, checkedTrackColor = accentColor.copy(alpha = 0.3f))
+                        )
                     }
                 }
             }

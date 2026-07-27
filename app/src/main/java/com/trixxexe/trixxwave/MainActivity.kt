@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
             val isExtractingStream by mainViewModel.isExtractingStream.collectAsState()
             val isOnlineSearchLoading by mainViewModel.isOnlineSearchLoading.collectAsState()
             val onlineStreamError by mainViewModel.onlineStreamError.collectAsState()
+            val downloadStatusMap by mainViewModel.downloadStatusMap.collectAsState()
 
             val permissionsToRequest = remember {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -338,6 +339,7 @@ class MainActivity : ComponentActivity() {
                                     likedSongs = likedSongs,
                                     allSongs = allSongs,
                                     playlists = playlists,
+                                    downloadStatusMap = downloadStatusMap,
                                     isOnlineMode = isOnlineMode,
                                     activeOnlineTab = activeOnlineTab,
                                     youtubeResults = youtubeResults,
@@ -353,6 +355,10 @@ class MainActivity : ComponentActivity() {
                                     onSearchAudius = { q -> mainViewModel.searchAudius(q) },
                                     onSearchRadio = { q -> mainViewModel.fetchRadioStations(q) },
                                     onPlayOnlineTrack = { song -> mainViewModel.playOnlineTrack(song) },
+                                    onToggleLike = { song -> mainViewModel.toggleLikeSong(song) },
+                                    onAddToPlaylist = { plId, song -> mainViewModel.addSongToPlaylist(plId, song) },
+                                    onDownloadSong = { song -> mainViewModel.downloadOnlineSong(song) },
+                                    onCreatePlaylist = { name, desc -> mainViewModel.createCustomPlaylist(name, desc) },
                                     onSongClick = { song -> mainViewModel.playSong(song) },
                                     onPlaylistClick = { pl -> selectedPlaylistForDetail = pl },
                                     onGenerateSmartMix = { prompt -> mainViewModel.generateSmartMix(prompt) },

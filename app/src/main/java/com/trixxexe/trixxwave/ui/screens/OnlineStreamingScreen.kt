@@ -12,10 +12,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Subscriptions
@@ -35,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.trixxexe.trixxwave.data.db.Playlist
 import com.trixxexe.trixxwave.data.db.Song
 import com.trixxexe.trixxwave.data.preferences.ThemeConfig
 import com.trixxexe.trixxwave.ui.components.glass.LiquidGlassCard
@@ -48,6 +54,8 @@ fun OnlineStreamingScreen(
     youtubeResults: List<Song>,
     audiusTracks: List<Song>,
     radioStations: List<Song>,
+    playlists: List<Playlist> = emptyList(),
+    downloadStatusMap: Map<Long, Float> = emptyMap(),
     isExtractingStream: Boolean,
     isLoading: Boolean,
     errorMessage: String?,
@@ -56,11 +64,137 @@ fun OnlineStreamingScreen(
     onSearchYoutube: (String) -> Unit,
     onSearchAudius: (String) -> Unit,
     onSearchRadio: (String) -> Unit,
-    onPlayTrack: (Song) -> Unit
+    onPlayTrack: (Song) -> Unit,
+    onToggleLike: (Song) -> Unit = {},
+    onAddToPlaylist: (Long, Song) -> Unit = { _, _ -> },
+    onDownloadSong: (Song) -> Unit = {},
+    onCreatePlaylist: (String, String) -> Unit = { _, _ -> }
 ) {
     val accentColor = getThemeAccentColor(themeConfig)
     var urlOrSearchInput by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
+
+    var selectedSongForPlaylist by remember { mutableStateOf<Song?>(null) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var newPlaylistName by remember { mutableStateOf("") }
+
+    if (selectedSongForPlaylist != null) {
+        AlertDialog(
+            onDismissRequest = { selectedSongForPlaylist = null },
+            containerColor = Color(0xFF18181A),
+            title = {
+                Text(
+                    text = "Add to Playlist",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Select a playlist to add '${selectedSongForPlaylist?.title}':",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (playlists.isEmpty()) {
+                        Text(
+                            text = "No custom playlists found. Create one below!",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp
+                        )
+                    } else {
+                        LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                            items(playlists) { pl ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            selectedSongForPlaylist?.let { song ->
+                                                onAddToPlaylist(pl.id, song)
+                                            }
+                                            selectedSongForPlaylist = null
+                                        }
+                                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MusicNote,
+                                        contentDescription = null,
+                                        tint = accentColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = pl.name,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCreatePlaylistDialog = true
+                }) {
+                    Text("+ New Playlist", color = accentColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedSongForPlaylist = null }) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                }
+            }
+        )
+    }
+
+    if (showCreatePlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreatePlaylistDialog = false },
+            containerColor = Color(0xFF18181A),
+            title = { Text("Create Playlist", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newPlaylistName,
+                    onValueChange = { newPlaylistName = it },
+                    placeholder = { Text("Playlist Name", color = Color.White.copy(alpha = 0.5f)) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accentColor,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newPlaylistName.isNotBlank()) {
+                            onCreatePlaylist(newPlaylistName, "Custom Playlist")
+                            newPlaylistName = ""
+                            showCreatePlaylistDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                ) {
+                    Text("Create", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreatePlaylistDialog = false }) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -127,7 +261,7 @@ fun OnlineStreamingScreen(
             }
         }
 
-        // Search / URL Input Field for active tab
+        // Search / Keyword Input Field
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -143,7 +277,7 @@ fun OnlineStreamingScreen(
                 placeholder = {
                     Text(
                         text = when (activeTab) {
-                            "YOUTUBE" -> "Paste YouTube Link or Search Query..."
+                            "YOUTUBE" -> "Search Song Name, Artist, or Paste Link..."
                             "AUDIUS" -> "Search Audius Artists, Tracks..."
                             else -> "Search Radio Stations by Name or Genre..."
                         },
@@ -237,7 +371,7 @@ fun OnlineStreamingScreen(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Extracting high-fidelity YouTube stream on-device...",
+                        text = "Extracting high-fidelity YouTube stream...",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
@@ -284,8 +418,8 @@ fun OnlineStreamingScreen(
                     if (youtubeResults.isEmpty() && !isLoading && !isExtractingStream) {
                         item {
                             EmptyStatePlaceholder(
-                                title = "YouTube Audio Stream Extractor",
-                                description = "Paste any YouTube link or video ID above to extract direct stream on-device, or search any song name.",
+                                title = "YouTube Audio Streaming",
+                                description = "Search any song name or artist keyword above (e.g., 'Anuv Jain', 'Arz Kiya Hai') to play or download instantly.",
                                 icon = Icons.Default.Subscriptions,
                                 accentColor = accentColor
                             )
@@ -295,7 +429,11 @@ fun OnlineStreamingScreen(
                             OnlineTrackRow(
                                 song = song,
                                 themeConfig = themeConfig,
-                                onPlayClick = { onPlayTrack(song) }
+                                downloadProgress = downloadStatusMap[song.id],
+                                onPlayClick = { onPlayTrack(song) },
+                                onToggleLike = { onToggleLike(song) },
+                                onAddToPlaylistClick = { selectedSongForPlaylist = song },
+                                onDownloadClick = { onDownloadSong(song) }
                             )
                         }
                     }
@@ -316,7 +454,11 @@ fun OnlineStreamingScreen(
                             OnlineTrackRow(
                                 song = song,
                                 themeConfig = themeConfig,
-                                onPlayClick = { onPlayTrack(song) }
+                                downloadProgress = downloadStatusMap[song.id],
+                                onPlayClick = { onPlayTrack(song) },
+                                onToggleLike = { onToggleLike(song) },
+                                onAddToPlaylistClick = { selectedSongForPlaylist = song },
+                                onDownloadClick = { onDownloadSong(song) }
                             )
                         }
                     }
@@ -338,7 +480,11 @@ fun OnlineStreamingScreen(
                                 song = station,
                                 themeConfig = themeConfig,
                                 isRadio = true,
-                                onPlayClick = { onPlayTrack(station) }
+                                downloadProgress = downloadStatusMap[station.id],
+                                onPlayClick = { onPlayTrack(station) },
+                                onToggleLike = { onToggleLike(station) },
+                                onAddToPlaylistClick = { selectedSongForPlaylist = station },
+                                onDownloadClick = { onDownloadSong(station) }
                             )
                         }
                     }
@@ -353,7 +499,11 @@ fun OnlineTrackRow(
     song: Song,
     themeConfig: ThemeConfig,
     isRadio: Boolean = false,
-    onPlayClick: () -> Unit
+    downloadProgress: Float? = null,
+    onPlayClick: () -> Unit,
+    onToggleLike: () -> Unit = {},
+    onAddToPlaylistClick: () -> Unit = {},
+    onDownloadClick: () -> Unit = {}
 ) {
     val accentColor = getThemeAccentColor(themeConfig)
 
@@ -426,22 +576,94 @@ fun OnlineTrackRow(
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
-            IconButton(
-                onClick = onPlayClick,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(accentColor.copy(alpha = 0.2f))
-                    .border(1.dp, accentColor.copy(alpha = 0.5f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play Stream",
-                    tint = accentColor,
-                    modifier = Modifier.size(22.dp)
-                )
+            // Action Buttons: Like, Add to Playlist, Download, Play
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Like Button
+                IconButton(
+                    onClick = onToggleLike,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (song.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Like Song",
+                        tint = if (song.isLiked) Color.Red else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Add to Playlist Button
+                IconButton(
+                    onClick = onAddToPlaylistClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlaylistAdd,
+                        contentDescription = "Add to Playlist",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Download Button / Progress
+                if (!isRadio) {
+                    if (downloadProgress != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (downloadProgress >= 1.0f) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Downloaded",
+                                    tint = accentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    progress = { downloadProgress },
+                                    color = accentColor,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                    } else {
+                        IconButton(
+                            onClick = onDownloadClick,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (song.source == "DOWNLOADED") Icons.Default.Check else Icons.Default.Download,
+                                contentDescription = "Download Song",
+                                tint = if (song.source == "DOWNLOADED") accentColor else Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Play Button
+                IconButton(
+                    onClick = onPlayClick,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.25f))
+                        .border(1.dp, accentColor.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play Stream",
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

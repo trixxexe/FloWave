@@ -50,6 +50,7 @@ fun HomeScreen(
     likedSongs: List<Song>,
     allSongs: List<Song>,
     playlists: List<Playlist>,
+    downloadStatusMap: Map<Long, Float> = emptyMap(),
     isOnlineMode: Boolean = false,
     activeOnlineTab: String = "YOUTUBE",
     youtubeResults: List<Song> = emptyList(),
@@ -65,6 +66,10 @@ fun HomeScreen(
     onSearchAudius: (String) -> Unit = {},
     onSearchRadio: (String) -> Unit = {},
     onPlayOnlineTrack: (Song) -> Unit = {},
+    onToggleLike: (Song) -> Unit = {},
+    onAddToPlaylist: (Long, Song) -> Unit = { _, _ -> },
+    onDownloadSong: (Song) -> Unit = {},
+    onCreatePlaylist: (String, String) -> Unit = { _, _ -> },
     onSongClick: (Song) -> Unit,
     onPlaylistClick: (Playlist) -> Unit = {},
     onGenerateSmartMix: (String) -> Unit,
@@ -187,6 +192,8 @@ fun HomeScreen(
                 youtubeResults = youtubeResults,
                 audiusTracks = audiusTracks,
                 radioStations = radioStations,
+                playlists = playlists,
+                downloadStatusMap = downloadStatusMap,
                 isExtractingStream = isExtractingStream,
                 isLoading = isOnlineSearchLoading,
                 errorMessage = onlineStreamError,
@@ -195,7 +202,11 @@ fun HomeScreen(
                 onSearchYoutube = onSearchYoutube,
                 onSearchAudius = onSearchAudius,
                 onSearchRadio = onSearchRadio,
-                onPlayTrack = onPlayOnlineTrack
+                onPlayTrack = onPlayOnlineTrack,
+                onToggleLike = onToggleLike,
+                onAddToPlaylist = onAddToPlaylist,
+                onDownloadSong = onDownloadSong,
+                onCreatePlaylist = onCreatePlaylist
             )
         } else {
             LazyColumn(
@@ -237,141 +248,6 @@ fun HomeScreen(
                             color = Color(0xFF94A3B8),
                             fontSize = 12.sp
                         )
-                    }
-                }
-            }
-        }
-
-        // AI Smart Mix Prompt Bar
-        item {
-            LiquidGlassCard(
-                themeConfig = themeConfig,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                cornerRadius = 20.dp
-            ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "AI",
-                            tint = Color(0xFFF27D26),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "AI Smart Mix Generator",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = smartMixPrompt,
-                        onValueChange = { smartMixPrompt = it },
-                        placeholder = {
-                            Text("e.g. 'Chill midnight synth drive' or 'Upbeat workout'", color = Color(0xFF64748B), fontSize = 13.sp)
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFFF27D26),
-                            unfocusedBorderColor = Color(0x33FFFFFF),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("ai_prompt_input"),
-                        trailingIcon = {
-                            IconButton(
-                                onClick = {
-                                    if (smartMixPrompt.isNotBlank()) {
-                                        onGenerateSmartMix(smartMixPrompt)
-                                        smartMixPrompt = ""
-                                    }
-                                },
-                                modifier = Modifier.testTag("ai_generate_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Generate",
-                                    tint = Color(0xFFF27D26)
-                                )
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-            }
-        }
-
-        // Playlists & AI Mixes Section
-        if (playlists.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Playlists & Smart AI Mixes",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-                )
-            }
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    items(playlists) { playlist ->
-                        LiquidGlassCard(
-                            themeConfig = themeConfig,
-                            modifier = Modifier
-                                .width(140.dp)
-                                .clickable { onPlaylistClick(playlist) },
-                            cornerRadius = 20.dp,
-                            testTag = "playlist_card_${playlist.id}"
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(120.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(
-                                            Brush.linearGradient(
-                                                colors = listOf(
-                                                    Color(0xFFF27D26).copy(alpha = 0.85f),
-                                                    Color(0xFFA855F7).copy(alpha = 0.85f),
-                                                    Color(0xFF06B6D4).copy(alpha = 0.85f)
-                                                )
-                                            )
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlaylistPlay,
-                                        contentDescription = "Playlist",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(44.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = playlist.name,
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = playlist.description ?: "Local Playlist",
-                                    color = Color(0xFFCBD5E1),
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
                     }
                 }
             }

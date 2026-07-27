@@ -48,13 +48,16 @@ fun LibraryScreen(
     var newPlaylistName by remember { mutableStateOf("") }
     var newPlaylistDesc by remember { mutableStateOf("") }
 
-    val tabs = listOf("Playlists (${playlists.size})", "Liked (${likedSongs.size})", "All Songs (${allSongs.size})", "Smart Folders")
+    val downloadedSongs = remember(allSongs) {
+        allSongs.filter { it.source == "DOWNLOADED" || it.filePath.contains("/downloads/") }
+    }
+
+    val tabs = listOf("Playlists (${playlists.size})", "Liked (${likedSongs.size})", "Downloaded (${downloadedSongs.size})", "All Songs (${allSongs.size})", "Smart Folders")
 
     Column(
         modifier = Modifier
             .testTag("library_screen")
             .fillMaxSize()
-            .padding(bottom = 120.dp)
     ) {
         // Header
         Row(
@@ -152,7 +155,10 @@ fun LibraryScreen(
         when (selectedTab) {
             0 -> {
                 // Playlists Tab
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 140.dp)
+                ) {
                     item {
                         // Create Playlist Button Card
                         LiquidGlassCard(
@@ -266,7 +272,10 @@ fun LibraryScreen(
                         )
                     }
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 140.dp)
+                    ) {
                         items(likedSongs) { song ->
                             SongRowItem(
                                 song = song,
@@ -278,6 +287,36 @@ fun LibraryScreen(
                 }
             }
             2 -> {
+                // Downloaded Songs Tab
+                if (downloadedSongs.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No downloaded tracks yet. Download any online track to play offline anytime!",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 140.dp)
+                    ) {
+                        items(downloadedSongs) { song ->
+                            SongRowItem(
+                                song = song,
+                                themeConfig = themeConfig,
+                                onClick = { onSongClick(song) }
+                            )
+                        }
+                    }
+                }
+            }
+            3 -> {
                 // All Songs Tab
                 Column(modifier = Modifier.fillMaxSize()) {
                     OutlinedTextField(
@@ -319,7 +358,10 @@ fun LibraryScreen(
                             )
                         }
                     } else {
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 140.dp)
+                        ) {
                             items(filtered) { song ->
                                 SongRowItem(
                                     song = song,
@@ -331,7 +373,7 @@ fun LibraryScreen(
                     }
                 }
             }
-            3 -> {
+            4 -> {
                 // Smart Folders
                 val smartFolders = listOf(
                     Triple(
@@ -365,7 +407,10 @@ fun LibraryScreen(
                         "${likedSongs.size} liked tracks"
                     )
                 )
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 140.dp)
+                ) {
                     items(smartFolders) { (playlist, folderName, subtitle) ->
                         LiquidGlassCard(
                             themeConfig = themeConfig,

@@ -591,7 +591,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun extractAndPlayYoutubeUrl(urlOrQuery: String) {
+    fun extractAndPlayYoutubeUrl(urlOrQuery: String, songTitle: String? = null, songArtist: String? = null) {
         if (urlOrQuery.isBlank()) return
         viewModelScope.launch {
             _isExtractingStream.value = true
@@ -604,14 +604,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            val result = youtubeRepo.extractAudioStream(urlOrQuery)
+            val result = youtubeRepo.extractAudioStream(urlOrQuery, songTitle, songArtist)
             _isExtractingStream.value = false
 
             if (result != null) {
                 val song = Song(
-                    id = System.currentTimeMillis(),
-                    title = result.title,
-                    artist = result.artist,
+                    id = if (videoId != null) -3000000000L - (videoId.hashCode().toLong().and(0x7FFFFFFF)) else System.currentTimeMillis(),
+                    title = result.title.ifBlank { songTitle ?: "YouTube Track" },
+                    artist = result.artist.ifBlank { songArtist ?: "YouTube Artist" },
                     album = "YouTube Direct",
                     durationMs = result.durationMs,
                     filePath = result.streamUrl,
@@ -623,7 +623,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 playSong(song, listOf(song))
             } else {
-                _onlineStreamError.value = "Failed to extract audio stream for link."
+                _onlineStreamError.value = "Unable to stream online track. Please check network or try searching keyword."
             }
         }
     }
@@ -657,9 +657,145 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playOnlineTrack(song: Song) {
         if (song.source == "YOUTUBE_EXTRACTED" && song.streamUrl.isNullOrBlank()) {
-            extractAndPlayYoutubeUrl(song.originalUrl ?: song.filePath)
+            extractAndPlayYoutubeUrl(song.originalUrl ?: song.filePath, song.title, song.artist)
         } else {
             playSong(song, listOf(song))
+        }
+    }
+
+    fun addSongToPlaylist(playlistId: Long, song: Song) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val existing = songDao.getSongById(song.id)
+                val targetId = if (existing == null) {
+                    songDao.insertSong(song)
+                } else {
+                    song.id
+                }
+                val currentSongs = playlistDao.getSongsForPlaylist(playlistId).firstOrNull() ?: emptyList()
+                val newPos = currentSongs.size
+                playlistDao.insertPlaylistSongCrossRef(
+                    PlaylistSongCrossRef(playlistId = playlistId, songId = targetId, position = newPos)
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private val _downloadStatusMap = MutableStateFlow<Map<Long, Float>>(emptyMap())
+    val downloadStatusMap: StateFlow<Map<Long, Float>> = _downloadStatusMap.asStateFlow()
+
+    fun downloadOnlineSong(song: Song) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 0.01f)
+                var targetStreamUrl = song.streamUrl
+                if (targetStreamUrl.isNullOrBlank() && (song.source == "YOUTUBE_EXTRACTED" || song.filePath.contains("youtube.com") || song.filePath.contains("youtu.be"))) {
+                    val extracted = youtubeRepo.extractAudioStream(song.originalUrl ?: song.filePath, song.title, song.artist)
+                    targetStreamUrl = extracted?.streamUrl
+                }
+                if (targetStreamUrl.isNullOrBlank()) {
+                    targetStreamUrl = song.filePath
+                }
+                if (targetStreamUrl.isBlank() || targetStreamUrl.startsWith("/")) {
+                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
+                    return@launch
+                }
+
+                val downloadDir = java.io.File(app.filesDir, "downloads").apply { mkdirs() }
+                val cleanFileName = "${song.id}_${song.title.replace(Regex("[^a-zA-Z0-9_-]"), "_")}.mp3"
+                val destFile = java.io.File(downloadDir, cleanFileName)
+
+                val req = okhttp3.Request.Builder()
+                    .url(targetStreamUrl)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                client.newCall(req).execute().use { response ->
+                    if (!response.isSuccessful || response.body == null) {
+                        _downloadStatusMap.value = _downloadStatusMap.value - song.id
+                        return@launch
+                    }
+                    val body = response.body!!
+                    val totalBytes = body.contentLength()
+                    var downloadedBytes = 0L
+
+                    body.byteStream().use { input ->
+                        destFile.outputStream().use { output ->
+                            val buffer = ByteArray(8192)
+                            var read: Int
+                            while (input.read(buffer).also { read = it } != -1) {
+                                output.write(buffer, 0, read)
+                                downloadedBytes += read
+                                if (totalBytes > 0) {
+                                    val progress = downloadedBytes.toFloat() / totalBytes
+                                    _downloadStatusMap.value = _downloadStatusMap.value + (song.id to progress)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val updatedSong = song.copy(
+                    filePath = destFile.absolutePath,
+                    source = "DOWNLOADED",
+                    streamUrl = destFile.absolutePath
+                )
+                val existing = songDao.getSongById(song.id)
+                if (existing == null) {
+                    songDao.insertSong(updatedSong)
+                } else {
+                    songDao.insertSong(updatedSong) // insert/replace
+                }
+
+                _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 1.0f)
+                kotlinx.coroutines.delay(1000L)
+                _downloadStatusMap.value = _downloadStatusMap.value - song.id
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _downloadStatusMap.value = _downloadStatusMap.value - song.id
+            }
+        }
+    }
+
+    fun exportSongToPublicStorage(song: Song) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val srcFile = java.io.File(song.filePath)
+                if (!srcFile.exists()) return@launch
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val values = android.content.ContentValues().apply {
+                        put(MediaStore.Audio.Media.DISPLAY_NAME, "${song.title} - ${song.artist}.mp3")
+                        put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+                        put(MediaStore.Audio.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_MUSIC + "/FloWave")
+                        put(MediaStore.Audio.Media.IS_PENDING, 1)
+                    }
+                    val uri = app.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                    if (uri != null) {
+                        app.contentResolver.openOutputStream(uri)?.use { out ->
+                            srcFile.inputStream().use { input -> input.copyTo(out) }
+                        }
+                        values.clear()
+                        values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                        app.contentResolver.update(uri, values, null, null)
+                    }
+                } else {
+                    val musicDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MUSIC)
+                    val floWaveFolder = java.io.File(musicDir, "FloWave").apply { mkdirs() }
+                    val dest = java.io.File(floWaveFolder, "${song.title} - ${song.artist}.mp3")
+                    srcFile.copyTo(dest, overwrite = true)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
