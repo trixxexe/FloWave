@@ -313,6 +313,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun playSong(song: Song, queue: List<Song> = allSongs.value) {
+        if ((song.source == "YOUTUBE_EXTRACTED" || song.filePath.contains("youtube.com") || song.filePath.contains("youtu.be")) && song.streamUrl.isNullOrBlank()) {
+            android.util.Log.d("MainViewModel", "playSong intercepted YouTube track with blank streamUrl. Triggering extraction for: '${song.title}'")
+            extractAndPlayYoutubeUrl(song.originalUrl ?: song.filePath)
+            return
+        }
+
+        android.util.Log.d("MainViewModel", "playSong setting currentSong: '${song.title}', streamUrl: ${song.streamUrl}, filePath: ${song.filePath}")
         _currentSong.value = song
         _playbackQueue.value = if (queue.isNotEmpty()) queue else listOf(song)
         _isPlaying.value = true
@@ -607,7 +614,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     artist = result.artist,
                     album = "YouTube Direct",
                     durationMs = result.durationMs,
-                    filePath = urlOrQuery,
+                    filePath = result.streamUrl,
                     albumArtUri = result.artworkUrl,
                     genre = "YouTube Stream",
                     source = "YOUTUBE_EXTRACTED",

@@ -72,11 +72,11 @@ class AudiusRepository {
                 val wrapper = adapter.fromJson(bodyStr) ?: return emptyList()
                 val dtos = wrapper.data ?: return emptyList()
 
-                dtos.mapIndexed { index, dto ->
+                dtos.map { dto ->
                     val streamUrl = "https://api.audius.co/v1/tracks/${dto.id}/stream?app_name=FloWave"
                     val artUri = dto.artwork?.medium ?: dto.artwork?.large ?: dto.artwork?.small
                     Song(
-                        id = -2000L - index - (dto.id.hashCode().toLong().and(0x7FFFFFFF)),
+                        id = -2000000000L - (dto.id.hashCode().toLong().and(0x7FFFFFFF)),
                         title = dto.title.ifBlank { "Audius Track" },
                         artist = dto.user?.name?.ifBlank { "Audius Artist" } ?: "Audius Artist",
                         album = dto.genre ?: "Audius Music",

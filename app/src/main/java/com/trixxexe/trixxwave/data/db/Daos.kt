@@ -32,6 +32,12 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE title LIKE '%' || :query || '%' OR artist LIKE '%' || :query || '%' OR album LIKE '%' || :query || '%' ORDER BY title ASC")
     fun searchSongs(query: String): Flow<List<Song>>
 
+    @Query("SELECT COUNT(*) FROM songs")
+    suspend fun getSongCount(): Int
+
+    @Query("SELECT filePath FROM songs")
+    suspend fun getAllSongPaths(): List<String>
+
     @Query("SELECT * FROM songs WHERE filePath = :path LIMIT 1")
     suspend fun getSongByPath(path: String): Song?
 

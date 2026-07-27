@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
@@ -53,19 +54,23 @@ object MediaCacheManager {
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(15000)
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .setDefaultRequestProperties(mapOf(
+                "Referer" to "https://www.youtube.com/",
+                "Origin" to "https://www.youtube.com"
+            ))
 
-        val cache = getCache(context) ?: return httpDataSourceFactory
-
-        return cacheDataSourceFactory ?: synchronized(this) {
-            cacheDataSourceFactory ?: run {
-                val factory = CacheDataSource.Factory()
-                    .setCache(cache)
-                    .setUpstreamDataSourceFactory(httpDataSourceFactory)
-                    .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-
-                cacheDataSourceFactory = factory
-                factory
-            }
+        val cache = getCache(context)
+        val httpSourceFactory = if (cache != null) {
+            CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(httpDataSourceFactory)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        } else {
+            httpDataSourceFactory
         }
+
+        // DefaultDataSource delegates HTTP/HTTPS to httpSourceFactory (with caching),
+        // while routing local content://, file://, assets directly via native ContentDataSource/FileDataSource
+        return DefaultDataSource.Factory(context.applicationContext, httpSourceFactory)
     }
 }

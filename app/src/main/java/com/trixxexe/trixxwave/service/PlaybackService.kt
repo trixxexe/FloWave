@@ -131,11 +131,12 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                android.util.Log.d("PlaybackService", "ExoPlayer playbackStateChanged: $playbackState (READY=${Player.STATE_READY}, BUFFERING=${Player.STATE_BUFFERING}, ENDED=${Player.STATE_ENDED})")
                 updateWidgetFromPlayer()
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                android.util.Log.e("PlaybackService", "ExoPlayer error: ${error.message}", error)
+                android.util.Log.e("PlaybackService", "ExoPlayer error [code=${error.errorCodeName}]: ${error.message}", error)
             }
         }
         playerListener = listener

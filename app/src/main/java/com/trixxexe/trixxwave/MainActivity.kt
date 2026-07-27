@@ -78,10 +78,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Safely start & bind PlaybackService
+        // Safely bind PlaybackService
         try {
             val serviceIntent = Intent(this, PlaybackService::class.java)
-            startService(serviceIntent)
             bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -213,7 +212,7 @@ class MainActivity : ComponentActivity() {
                 if (isPlaying && isBound) {
                     while (isPlaying) {
                         val pos = playbackService?.getCurrentPosition() ?: 0L
-                        if (pos > 0) {
+                        if (pos >= 0) {
                             mainViewModel.updatePositionFromService(pos)
                         }
                         kotlinx.coroutines.delay(500L)

@@ -6,6 +6,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.util.Log
 import com.trixxexe.trixxwave.data.db.Playlist
 import com.trixxexe.trixxwave.data.db.Song
 import com.trixxexe.trixxwave.data.db.TrixxWaveDatabase
@@ -15,6 +16,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 object MediaStoreScanner {
+
+    private const val TAG = "MediaStoreScanner"
 
     suspend fun scanDeviceAudio(context: Context): Int = withContext(Dispatchers.IO) {
         val database = TrixxWaveDatabase.getDatabase(context)
@@ -41,8 +44,12 @@ object MediaStoreScanner {
         val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
 
         var addedCount = 0
+        var totalFound = 0
+
+        val existingPaths = songDao.getAllSongPaths().toHashSet()
 
         try {
+            Log.d(TAG, "Starting MediaStore query on collection: $collection")
             context.contentResolver.query(
                 collection,
                 projection,
@@ -59,11 +66,18 @@ object MediaStoreScanner {
                 val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
 
                 while (cursor.moveToNext()) {
-                    val filePath = cursor.getString(dataColumn) ?: continue
-                    if (songDao.getSongByPath(filePath) != null) continue
-
+                    totalFound++
                     val mediaId = cursor.getLong(idColumn)
-                    val title = cursor.getString(titleColumn) ?: File(filePath).nameWithoutExtension
+                    val rawFilePath = cursor.getString(dataColumn) ?: ""
+                    val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, mediaId).toString()
+
+                    // O(1) check if already in DB by content URI or path
+                    if (existingPaths.contains(contentUri) || (rawFilePath.isNotBlank() && existingPaths.contains(rawFilePath))) {
+                        continue
+                    }
+
+                    val title = cursor.getString(titleColumn)?.takeIf { it.isNotBlank() }
+                        ?: if (rawFilePath.isNotBlank()) File(rawFilePath).nameWithoutExtension else "Local Track #$mediaId"
                     val artist = cursor.getString(artistColumn).let {
                         if (it == null || it == "<unknown>") "Unknown Artist" else it
                     }
@@ -80,14 +94,14 @@ object MediaStoreScanner {
                         null
                     }
 
-                    val waveform = WaveformExtractor.extractWaveformPoints(filePath)
+                    val waveform = WaveformExtractor.extractWaveformPoints(rawFilePath.ifBlank { contentUri })
 
                     val song = Song(
                         title = title,
                         artist = artist,
                         album = album,
                         durationMs = duration,
-                        filePath = filePath,
+                        filePath = contentUri, // Primary playback URI is content:// for Scoped Storage compatibility
                         albumArtUri = albumArtUri,
                         waveformPoints = waveform,
                         dateAdded = System.currentTimeMillis()
@@ -96,20 +110,64 @@ object MediaStoreScanner {
                     addedCount++
                 }
             }
+            Log.d(TAG, "MediaStore scan complete: found $totalFound tracks, added $addedCount new tracks")
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Error querying MediaStore: ${e.message}", e)
         }
 
         // Initialize default smart playlists if none exist
         ensureDefaultPlaylists(playlistDao)
+        ensureDemoTracks(songDao)
 
         addedCount
+    }
+
+    private suspend fun ensureDemoTracks(songDao: com.trixxexe.trixxwave.data.db.SongDao) {
+        if (songDao.getSongCount() > 0) return
+        val demoSongs = listOf(
+            Song(
+                title = "Sofasound x Kaiyo - Come On",
+                artist = "Phuture Collective",
+                album = "Audius Wave Essentials",
+                durationMs = 210000L,
+                filePath = "https://api.audius.co/v1/tracks/Evw5wAJ/stream?app_name=FloWave",
+                albumArtUri = "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/52/0b/27/520b273a-3810-cd7b-f695-cd77b720dbe8/8052869110279.jpg/600x600bb.jpg",
+                genre = "Cyberpunk / Synthwave",
+                source = "DEMO_STREAM",
+                streamUrl = "https://api.audius.co/v1/tracks/Evw5wAJ/stream?app_name=FloWave",
+                waveformPoints = "0.2,0.5,0.8,0.9,0.7,0.4,0.8,0.9,0.6,0.3,0.7,0.9,0.5"
+            ),
+            Song(
+                title = "Blinding Lights (Acoustic Ambient Flow)",
+                artist = "Neon Dreamers",
+                album = "Liquid Glass Collection",
+                durationMs = 201000L,
+                filePath = "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/17/b4/8f/17b48f9a-0b93-6bb8-fe1d-3a16623c2cfb/mzaf_9560252727299052414.plus.aac.p.m4a",
+                albumArtUri = "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a6/6e/bf/a66ebf79-5008-8948-b352-a790fc87446b/19UM1IM04638.rgb.jpg/600x600bb.jpg",
+                genre = "Synthwave",
+                source = "DEMO_STREAM",
+                streamUrl = "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/17/b4/8f/17b48f9a-0b93-6bb8-fe1d-3a16623c2cfb/mzaf_9560252727299052414.plus.aac.p.m4a",
+                waveformPoints = "0.3,0.6,0.9,0.7,0.4,0.8,0.9,0.5,0.8,0.4,0.7,0.9,0.6"
+            ),
+            Song(
+                title = "Cyberpunk Synthwave Drive",
+                artist = "Hack Black",
+                album = "Future Retro Wave",
+                durationMs = 195000L,
+                filePath = "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/81/a6/20/81a62065-8ffd-8e43-653f-0aebcd7ede8a/mzaf_10500050305620563985.plus.aac.p.m4a",
+                albumArtUri = "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/52/0b/27/520b273a-3810-cd7b-f695-cd77b720dbe8/8052869110279.jpg/600x600bb.jpg",
+                genre = "Electro Synth",
+                source = "DEMO_STREAM",
+                streamUrl = "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/81/a6/20/81a62065-8ffd-8e43-653f-0aebcd7ede8a/mzaf_10500050305620563985.plus.aac.p.m4a",
+                waveformPoints = "0.4,0.7,0.8,0.6,0.9,0.8,0.5,0.7,0.9,0.6,0.8,0.5,0.7"
+            )
+        )
+        songDao.insertSongs(demoSongs)
     }
 
     private suspend fun ensureDefaultPlaylists(playlistDao: com.trixxexe.trixxwave.data.db.PlaylistDao) {
         val existing = playlistDao.getAllPlaylists().firstOrNull()
         if (!existing.isNullOrEmpty()) return
-        // If empty, insert standard playlists
         val defaultLists = listOf(
             Playlist(name = "Liked Songs", isAutoGenerated = true, description = "Your favorite tracks"),
             Playlist(name = "Cyberpunk Glass Mix", isAutoGenerated = true, description = "AI Curated Synth & Electro Wave"),
@@ -152,9 +210,10 @@ object MediaStoreScanner {
             val newId = songDao.insertSong(song)
             songDao.getSongById(newId)
         } catch (e: Exception) {
+            Log.e(TAG, "Error importing file URI $uri: ${e.message}", e)
             null
         } finally {
-            try { retriever.release() } catch (e: Exception) {}
+            try { retriever.release() } catch (_: Exception) {}
         }
     }
 }

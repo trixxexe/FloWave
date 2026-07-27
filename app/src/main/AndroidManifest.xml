@@ -65,7 +65,11 @@
         <service
             android:name="com.trixxexe.trixxwave.service.DynamicIslandOverlayService"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.property.SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating music player overlay control notch" />
+        </service>
 
         <!-- Home Screen Glass Widget -->
         <receiver

@@ -37,20 +37,20 @@ class RadioRepository {
     private val adapter = moshi.adapter(Array<RadioStationDto>::class.java)
 
     suspend fun getTopStations(limit: Int = 30): List<Song> = withContext(Dispatchers.IO) {
-        val url = "https://de1.api.radio-browser.info/json/stations/topvote/$limit"
+        val url = "https://all.api.radio-browser.info/json/stations/topvote/$limit"
         fetchStationsFromUrl(url)
     }
 
     suspend fun searchStations(query: String, limit: Int = 30): List<Song> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext getTopStations(limit)
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val url = "https://de1.api.radio-browser.info/json/stations/search?name=$encoded&limit=$limit"
+        val url = "https://all.api.radio-browser.info/json/stations/search?name=$encoded&limit=$limit"
         fetchStationsFromUrl(url)
     }
 
     suspend fun getStationsByTag(tag: String, limit: Int = 30): List<Song> = withContext(Dispatchers.IO) {
         val encoded = java.net.URLEncoder.encode(tag, "UTF-8")
-        val url = "https://de1.api.radio-browser.info/json/stations/search?tag=$encoded&limit=$limit"
+        val url = "https://all.api.radio-browser.info/json/stations/search?tag=$encoded&limit=$limit"
         fetchStationsFromUrl(url)
     }
 
@@ -64,10 +64,10 @@ class RadioRepository {
             client.newCall(request).execute().use { response ->
                 val bodyStr = response.body?.string() ?: return emptyList()
                 val dtos = adapter.fromJson(bodyStr) ?: return emptyList()
-                dtos.mapIndexed { index, dto ->
+                dtos.map { dto ->
                     val streamUrl = dto.urlResolved?.takeIf { it.isNotBlank() } ?: dto.url
                     Song(
-                        id = -1000L - index - (dto.stationUuid.hashCode().toLong().and(0x7FFFFFFF)),
+                        id = -1000000000L - (dto.stationUuid.hashCode().toLong().and(0x7FFFFFFF)),
                         title = dto.name.ifBlank { "Radio Station" },
                         artist = if (!dto.country.isNullOrBlank()) dto.country else "Live Radio",
                         album = if (!dto.tags.isNullOrBlank()) dto.tags else "Radio Browser",
@@ -85,7 +85,4 @@ class RadioRepository {
             emptyList()
         }
     }
-
-    private fun String?.isNotNullOrBlank(): Boolean = this != null && this.isNotBlank()
-    private fun String?.isNull_or_blank(): Boolean = this == null || this.isBlank()
 }

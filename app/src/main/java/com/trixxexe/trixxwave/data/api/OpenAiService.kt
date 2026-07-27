@@ -66,7 +66,11 @@ interface OpenAiService {
     companion object {
         fun create(): OpenAiService {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = if (com.trixxexe.trixxwave.BuildConfig.DEBUG) {
+                    HttpLoggingInterceptor.Level.BODY
+                } else {
+                    HttpLoggingInterceptor.Level.NONE
+                }
             }
             val client = OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)

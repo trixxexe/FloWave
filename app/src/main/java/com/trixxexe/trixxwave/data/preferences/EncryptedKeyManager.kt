@@ -2,6 +2,7 @@ package com.trixxexe.trixxwave.data.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -17,27 +18,38 @@ data class AiConfig(
 
 class EncryptedKeyManager(context: Context) {
 
-    private val prefs: SharedPreferences by lazy {
-        try {
-            val masterKey = MasterKey.Builder(context.applicationContext)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
+    private val TAG = "EncryptedKeyManager"
+    private val PREF_NAME = "trixxwave_secure_ai_prefs"
 
-            EncryptedSharedPreferences.create(
-                context.applicationContext,
-                "trixxwave_secure_ai_prefs",
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Throwable) {
-            // Fallback for emulator or older crypto provider
+    private val prefs: SharedPreferences by lazy {
+        val appContext = context.applicationContext
+        try {
+            createEncryptedPrefs(appContext)
+        } catch (e1: Throwable) {
+            Log.e(TAG, "EncryptedSharedPreferences init failed: ${e1.message}. Attempting recovery...", e1)
             try {
-                context.getSharedPreferences("trixxwave_secure_ai_prefs_fallback", Context.MODE_PRIVATE)
+                // Recovery step: delete corrupted store and recreate
+                appContext.deleteSharedPreferences(PREF_NAME)
+                createEncryptedPrefs(appContext)
             } catch (e2: Throwable) {
-                context.getSharedPreferences("trixxwave_prefs_basic", Context.MODE_PRIVATE)
+                Log.e(TAG, "EncryptedSharedPreferences recovery failed: ${e2.message}. Falling back to in-memory store.", e2)
+                InMemorySharedPreferences()
             }
         }
+    }
+
+    private fun createEncryptedPrefs(appContext: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(appContext)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        return EncryptedSharedPreferences.create(
+            appContext,
+            PREF_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
 
     fun getAiConfig(): AiConfig {
@@ -74,5 +86,140 @@ class EncryptedKeyManager(context: Context) {
             .putBoolean("ai_smart_mixes", config.smartMixesEnabled)
             .putBoolean("ai_track_insights", config.trackInsightsEnabled)
             .apply()
+    }
+}
+
+/**
+ * In-memory non-persisted SharedPreferences fallback to ensure API keys and secrets
+ * are never written to unencrypted disk storage if Android KeyStore initialization fails.
+ */
+private class InMemorySharedPreferences : SharedPreferences {
+    private val data = mutableMapOf<String, Any?>()
+    private val listeners = mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
+
+    override fun getAll(): MutableMap<String, *> = data.toMutableMap()
+
+    override fun getString(key: String?, defValue: String?): String? {
+        return (data[key] as? String) ?: defValue
+    }
+
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? {
+        @Suppress("UNCHECKED_CAST")
+        return (data[key] as? MutableSet<String>) ?: defValues
+    }
+
+    override fun getInt(key: String?, defValue: Int): Int {
+        return (data[key] as? Int) ?: defValue
+    }
+
+    override fun getLong(key: String?, defValue: Long): Long {
+        return (data[key] as? Long) ?: defValue
+    }
+
+    override fun getFloat(key: String?, defValue: Float): Float {
+        return (data[key] as? Float) ?: defValue
+    }
+
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean {
+        return (data[key] as? Boolean) ?: defValue
+    }
+
+    override fun contains(key: String?): Boolean = data.containsKey(key)
+
+    override fun edit(): SharedPreferences.Editor = EditorImpl()
+
+    override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {
+        listener?.let { listeners.add(it) }
+    }
+
+    override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {
+        listener?.let { listeners.remove(it) }
+    }
+
+    private inner class EditorImpl : SharedPreferences.Editor {
+        private val tempMap = mutableMapOf<String, Any?>()
+        private val removedKeys = mutableSetOf<String>()
+        private var clearAll = false
+
+        override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+            if (key != null) {
+                tempMap[key] = value
+                removedKeys.remove(key)
+            }
+            return this
+        }
+
+        override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor {
+            if (key != null) {
+                tempMap[key] = values
+                removedKeys.remove(key)
+            }
+            return this
+        }
+
+        override fun putInt(key: String?, value: Int): SharedPreferences.Editor {
+            if (key != null) {
+                tempMap[key] = value
+                removedKeys.remove(key)
+            }
+            return this
+        }
+
+        override fun putLong(key: String?, value: Long): SharedPreferences.Editor {
+            if (key != null) {
+                tempMap[key] = value
+                removedKeys.remove(key)
+            }
+            return this
+        }
+
+        override fun putFloat(key: String?, value: Float): SharedPreferences.Editor {
+            if (key != null) {
+                tempMap[key] = value
+                removedKeys.remove(key)
+            }
+            return this
+        }
+
+        override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor {
+            if (key != null) {
+                tempMap[key] = value
+                removedKeys.remove(key)
+            }
+            return this
+        }
+
+        override fun remove(key: String?): SharedPreferences.Editor {
+            if (key != null) {
+                removedKeys.add(key)
+                tempMap.remove(key)
+            }
+            return this
+        }
+
+        override fun clear(): SharedPreferences.Editor {
+            clearAll = true
+            tempMap.clear()
+            removedKeys.clear()
+            return this
+        }
+
+        override fun commit(): Boolean {
+            apply()
+            return true
+        }
+
+        override fun apply() {
+            synchronized(data) {
+                if (clearAll) data.clear()
+                for (key in removedKeys) data.remove(key)
+                data.putAll(tempMap)
+            }
+            for (listener in listeners) {
+                for (key in tempMap.keys) {
+                    listener.onSharedPreferenceChanged(this@InMemorySharedPreferences, key)
+                }
+            }
+        }
     }
 }
