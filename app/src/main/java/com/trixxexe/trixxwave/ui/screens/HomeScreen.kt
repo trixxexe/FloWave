@@ -94,6 +94,15 @@ fun HomeScreen(
         )
     }
     val greeting = remember { dynamicGreetings.random() }
+    val uniqueSongs = remember(allSongs) {
+        allSongs.distinctBy { song ->
+            if (song.title.isNotBlank() && song.artist.isNotBlank()) {
+                "${song.title.trim().lowercase()}___${song.artist.trim().lowercase()}"
+            } else {
+                song.id.toString()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -313,7 +322,7 @@ fun HomeScreen(
         // All Songs Quick Grid
         item {
             Text(
-                text = "Your Tracks (${allSongs.size})",
+                text = "Your Tracks (${uniqueSongs.size})",
                 color = Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -321,7 +330,7 @@ fun HomeScreen(
             )
         }
 
-        if (allSongs.isEmpty()) {
+        if (uniqueSongs.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
@@ -338,7 +347,7 @@ fun HomeScreen(
                 }
             }
         } else {
-            items(allSongs) { song ->
+            items(uniqueSongs) { song ->
                 SongRowItem(
                     song = song,
                     themeConfig = themeConfig,

@@ -338,12 +338,18 @@ class PlaybackService : MediaSessionService() {
                     .setUri(androidUri)
                     .setMediaMetadata(metadata)
 
-                if (isGaplessEnabled && (s.trimStartMs > 0 || s.trimEndMs > 0)) {
+                val trimStart = if (isGaplessEnabled) {
+                    if (s.trimStartMs > 0) s.trimStartMs else 900L // Default 0.9s pre-music silence cut
+                } else {
+                    0L
+                }
+
+                if (isGaplessEnabled && (trimStart > 0 || s.trimEndMs > 0)) {
                     val clippingBuilder = MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(s.trimStartMs)
+                        .setStartPositionMs(trimStart)
 
                     if (s.trimEndMs > 0 && s.durationMs > s.trimEndMs) {
-                        clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(s.trimStartMs + 500L))
+                        clippingBuilder.setEndPositionMs((s.durationMs - s.trimEndMs).coerceAtLeast(trimStart + 500L))
                     }
                     builder.setClippingConfiguration(clippingBuilder.build())
                 }
@@ -353,7 +359,12 @@ class PlaybackService : MediaSessionService() {
 
             p.setMediaItems(mediaItems)
             val songIndex = playlist.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
-            p.seekTo(songIndex, if (isGaplessEnabled) song.trimStartMs else 0L)
+            val seekStart = if (isGaplessEnabled) {
+                if (song.trimStartMs > 0) song.trimStartMs else 900L
+            } else {
+                0L
+            }
+            p.seekTo(songIndex, seekStart)
             p.prepare()
             p.play()
         } catch (e: Throwable) {

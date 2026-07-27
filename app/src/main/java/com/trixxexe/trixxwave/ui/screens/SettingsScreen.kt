@@ -729,18 +729,90 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("FloWave Engine", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Text("Version 2.5 • Liquid Glass Native Build", color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("FloWave Engine", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text("Version 2.4.0 • Liquid Glass Native Build", color = accentColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Developer : Ritam", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Developer Instagram", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Instagram handle 1: not_your_ritam
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/not_your_ritam"))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1306C), contentColor = Color.White),
+                            shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            InstagramLogoIcon(modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("not_your_ritam", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Instagram handle 2: ritam.localhost
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/ritam.localhost"))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF833AB4), contentColor = Color.White),
+                            shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            InstagramLogoIcon(modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ritam.localhost", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "Crafted with Kotlin, Jetpack Compose, Material 3, and Media3 ExoPlayer. Designed for high-fidelity offline & online listening.",
                         color = Color(0xFF94A3B8),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(140.dp))
         }
+    }
+}
+
+@Composable
+fun InstagramLogoIcon(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val sizePx = size.width
+        val stroke = sizePx * 0.1f
+        drawRoundRect(
+            color = Color.White,
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(sizePx * 0.28f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
+        )
+        drawCircle(
+            color = Color.White,
+            radius = sizePx * 0.22f,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
+        )
+        drawCircle(
+            color = Color.White,
+            radius = sizePx * 0.05f,
+            center = androidx.compose.ui.geometry.Offset(sizePx * 0.72f, sizePx * 0.28f)
+        )
     }
 }
 

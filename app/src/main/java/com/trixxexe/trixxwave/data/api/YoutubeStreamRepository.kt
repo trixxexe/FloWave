@@ -61,9 +61,18 @@ class YoutubeStreamRepository(private val context: Context) {
 
     private val TAG = "YoutubeStreamRepo"
 
+    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, StreamExtractionResult>()
+
     private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
+    private val fastClient = OkHttpClient.Builder()
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val moshi = Moshi.Builder()
@@ -102,36 +111,47 @@ class YoutubeStreamRepository(private val context: Context) {
 
     suspend fun extractAudioStream(urlOrQuery: String, songTitle: String? = null, songArtist: String? = null): StreamExtractionResult? = withContext(Dispatchers.IO) {
         val cleanId = extractVideoId(urlOrQuery) ?: urlOrQuery.trim()
+        
+        // Instant Cache Hit (< 1ms)
+        streamCache[cleanId]?.let { cached ->
+            Log.d(TAG, "[Cache Hit] Instantly returning streamUrl for '$cleanId'")
+            return@withContext cached
+        }
+
         Log.d(TAG, "Starting audio stream extraction for videoId/query: '$cleanId', title: '$songTitle', artist: '$songArtist'")
 
-        // 1. Try Youtubei Player API Direct
+        // 1. Try Cobalt API (Fastest direct stream)
+        val cobaltResult = tryExtractCobaltApi(cleanId)
+        if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank()) {
+            Log.d(TAG, "[Success] Cobalt API extracted streamUrl: ${cobaltResult.streamUrl.take(80)}...")
+            streamCache[cleanId] = cobaltResult
+            return@withContext cobaltResult
+        }
+
+        // 2. Try Youtubei Player API Direct
         if (cleanId.length == 11) {
             val youtubeiResult = tryExtractYoutubeiApi(cleanId)
             if (youtubeiResult != null && youtubeiResult.streamUrl.isNotBlank()) {
                 Log.d(TAG, "[Success] Youtubei API extracted streamUrl: ${youtubeiResult.streamUrl.take(80)}...")
+                streamCache[cleanId] = youtubeiResult
                 return@withContext youtubeiResult
             }
-        }
-
-        // 2. Try Invidious API
-        val invidiousResult = tryExtractInvidiousApi(cleanId)
-        if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] Invidious API extracted streamUrl: ${invidiousResult.streamUrl.take(80)}...")
-            return@withContext invidiousResult
         }
 
         // 3. Try Piped API
         val pipedResult = tryExtractPipedApi(cleanId)
         if (pipedResult != null && pipedResult.streamUrl.isNotBlank()) {
             Log.d(TAG, "[Success] Piped API extracted streamUrl: ${pipedResult.streamUrl.take(80)}...")
+            streamCache[cleanId] = pipedResult
             return@withContext pipedResult
         }
 
-        // 4. Try Cobalt API
-        val cobaltResult = tryExtractCobaltApi(cleanId)
-        if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] Cobalt API extracted streamUrl: ${cobaltResult.streamUrl.take(80)}...")
-            return@withContext cobaltResult
+        // 4. Try Invidious API
+        val invidiousResult = tryExtractInvidiousApi(cleanId)
+        if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank()) {
+            Log.d(TAG, "[Success] Invidious API extracted streamUrl: ${invidiousResult.streamUrl.take(80)}...")
+            streamCache[cleanId] = invidiousResult
+            return@withContext invidiousResult
         }
 
         // 5. Build clean search query for iTunes/Audius Fallbacks
@@ -186,7 +206,7 @@ class YoutubeStreamRepository(private val context: Context) {
                         .post(payload.toRequestBody(mediaType))
                         .build()
 
-                    client.newCall(req).execute().use { response ->
+                    fastClient.newCall(req).execute().use { response ->
                         if (!response.isSuccessful) return@use
                         val body = response.body?.string() ?: return@use
                         val jsonObj = JSONObject(body)
@@ -297,7 +317,7 @@ class YoutubeStreamRepository(private val context: Context) {
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build()
 
-                client.newCall(req).execute().use { response ->
+                fastClient.newCall(req).execute().use { response ->
                     if (!response.isSuccessful) return@use
                     val body = response.body?.string() ?: return@use
                     val jsonObj = JSONObject(body)
@@ -364,7 +384,7 @@ class YoutubeStreamRepository(private val context: Context) {
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build()
 
-                client.newCall(req).execute().use { response ->
+                fastClient.newCall(req).execute().use { response ->
                     if (!response.isSuccessful) return@use
                     val body = response.body?.string() ?: return@use
                     val dto = pipedStreamAdapter.fromJson(body) ?: return@use
@@ -407,7 +427,7 @@ class YoutubeStreamRepository(private val context: Context) {
                     .post(body)
                     .build()
 
-                client.newCall(req).execute().use { res ->
+                fastClient.newCall(req).execute().use { res ->
                     val respStr = res.body?.string() ?: return@use
                     val jsonObj = JSONObject(respStr)
                     val status = jsonObj.optString("status")

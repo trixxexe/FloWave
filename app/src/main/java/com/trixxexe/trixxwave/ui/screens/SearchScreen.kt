@@ -65,7 +65,6 @@ fun SearchScreen(
         modifier = Modifier
             .testTag("search_screen")
             .fillMaxSize()
-            .padding(bottom = 120.dp)
     ) {
         Text(
             text = "Search Library",
@@ -240,7 +239,8 @@ fun SearchScreen(
 
         // Results List
         LazyColumn(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 140.dp, top = 8.dp)
         ) {
             items(filteredSongs) { song ->
                 SongRowItem(
