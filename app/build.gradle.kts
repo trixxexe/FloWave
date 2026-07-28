@@ -7,6 +7,7 @@ plugins {
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
+  alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -100,6 +101,7 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.kotlinx.coroutines.android)
+  implementation(libs.kotlinx.coroutines.guava)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
@@ -113,9 +115,11 @@ dependencies {
   implementation(libs.androidx.media3.common)
 
   // YouTube Extraction & Offline Downloads
-  implementation(libs.newpipe.extractor)
-  implementation(libs.youtubedl.android)
-  implementation(libs.youtubedl.ffmpeg)
+  // removed newpipe, youtubedl
+  
+  // Serialization & Tags
+  implementation(libs.kotlinx.serialization.json)
+  implementation(libs.jaudiotagger)
 
   // Security, Biometric, and WorkManager
   implementation(libs.androidx.security.crypto)
