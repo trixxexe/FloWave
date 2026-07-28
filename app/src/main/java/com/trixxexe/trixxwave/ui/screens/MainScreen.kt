@@ -2291,14 +2291,17 @@ fun OnboardingProfileModal(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .systemBarsPadding()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Step Indicator Dots
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     listOf(1, 2, 3).forEach { step ->
@@ -2309,206 +2312,203 @@ fun OnboardingProfileModal(
                                 .clip(CircleShape)
                                 .background(if (currentStep == step) accentColor else Color(0x33FFFFFF))
                         )
+                        if (step < 3) Spacer(modifier = Modifier.width(8.dp))
                     }
                 }
 
-                when (currentStep) {
-                    1 -> {
-                        // Welcome Screen
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(100.dp),
-                                shape = CircleShape,
-                                color = Color(0x1AFFFFFF),
-                                border = BorderStroke(2.dp, accentColor)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.GraphicEq, contentDescription = null, tint = accentColor, modifier = Modifier.size(52.dp))
+                // Middle Content Area - weighted and scrollable so content never pushes buttons off screen
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        when (currentStep) {
+                            1 -> {
+                                Surface(
+                                    modifier = Modifier.size(90.dp),
+                                    shape = CircleShape,
+                                    color = Color(0x1AFFFFFF),
+                                    border = BorderStroke(2.dp, accentColor)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.GraphicEq, contentDescription = null, tint = accentColor, modifier = Modifier.size(48.dp))
+                                    }
                                 }
+
+                                Text(
+                                    text = "Welcome to FloWave",
+                                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+
+                                Text(
+                                    text = "Next-generation liquid glass audio player with AI acoustic mood tagging, synchronized lyrics, and dynamic visualizer refraction.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center
+                                )
                             }
+                            2 -> {
+                                Text(
+                                    text = "Set Up Your Profile",
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Personalize your identity and profile picture",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
 
-                            Text(
-                                text = "Welcome to FloWave",
-                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
+                                AvatarDisplay(
+                                    avatarKey = selectedAvatar,
+                                    modifier = Modifier
+                                        .size(100.dp)
+                                        .clip(CircleShape)
+                                        .border(2.dp, accentColor, CircleShape)
+                                )
 
-                            Text(
-                                text = "Next-generation liquid glass audio player with AI acoustic mood tagging, synchronized lyrics, and dynamic visualizer refraction.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                                Text(
+                                    text = "Or pick an animated avatar preset:",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
 
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Button(
-                                onClick = { currentStep = 2 },
-                                modifier = Modifier.fillMaxWidth().height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Text("Continue", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.Black)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                                ) {
+                                    avatars.forEach { avatar ->
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.clickable { selectedAvatar = avatar }
+                                        ) {
+                                            AvatarDisplay(
+                                                avatarKey = avatar,
+                                                modifier = Modifier
+                                                    .size(50.dp)
+                                                    .clip(CircleShape)
+                                                    .border(
+                                                        if (selectedAvatar == avatar) 2.dp else 0.dp,
+                                                        accentColor,
+                                                        CircleShape
+                                                    )
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(avatar, style = MaterialTheme.typography.labelSmall, color = Color.White)
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                OutlinedTextField(
+                                    value = nameInput,
+                                    onValueChange = { nameInput = it },
+                                    label = { Text("Your Name or Alias") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = accentColor,
+                                        unfocusedBorderColor = Color(0x33FFFFFF),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    )
+                                )
+                            }
+                            3 -> {
+                                Text(
+                                    text = "Select Your Vibe",
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Choose your glass material and theme palette",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+
+                                val vibes = listOf(
+                                    VibePreset("Sleek Interface", "Warm Amber Orange", "#F27D26"),
+                                    VibePreset("Liquid Obsidian", "Neon Cyan & Obsidian", "#00F5D4"),
+                                    VibePreset("Cyber Pink", "Neon Pink & Electric", "#FF007A"),
+                                    VibePreset("Emerald Wave", "Deep Forest Mint", "#10B981"),
+                                    VibePreset("Sunset Gold", "Amber Gold Glow", "#F59E0B"),
+                                    VibePreset("Aether White", "Clean Glass", "#6366F1")
+                                )
+
+                                vibes.forEach { vibe ->
+                                    VibeCard(
+                                        title = vibe.name,
+                                        subtitle = vibe.desc,
+                                        colorHex = vibe.hex,
+                                        isSelected = selectedVibe == vibe.name,
+                                        onClick = {
+                                            selectedVibe = vibe.name
+                                            selectedVibeHex = vibe.hex
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
-                    2 -> {
-                        // Set Up Profile
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Bottom Action Button Row - FIXED at the bottom, above system navigation bar!
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = if (currentStep == 1) Arrangement.Center else Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (currentStep > 1) {
+                        TextButton(
+                            onClick = { currentStep-- },
+                            modifier = Modifier.height(48.dp)
                         ) {
-                            Text(
-                                text = "Set Up Your Profile",
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Personalize your identity and profile picture",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.6f)
-                            )
-
-                            AvatarDisplay(
-                                avatarKey = selectedAvatar,
-                                modifier = Modifier
-                                    .size(110.dp)
-                                    .clip(CircleShape)
-                                    .border(2.dp, accentColor, CircleShape)
-                            )
-
-                            Text(
-                                text = "Or pick an animated Ghibli preset avatar:",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.horizontalScroll(rememberScrollState())
-                            ) {
-                                avatars.forEach { avatar ->
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.clickable { selectedAvatar = avatar }
-                                    ) {
-                                        AvatarDisplay(
-                                            avatarKey = avatar,
-                                            modifier = Modifier
-                                                .size(54.dp)
-                                                .clip(CircleShape)
-                                                .border(
-                                                    if (selectedAvatar == avatar) 2.dp else 0.dp,
-                                                    accentColor,
-                                                    CircleShape
-                                                )
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(avatar, style = MaterialTheme.typography.labelSmall, color = Color.White)
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            OutlinedTextField(
-                                value = nameInput,
-                                onValueChange = { nameInput = it },
-                                label = { Text("Your Name or Alias") },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = accentColor,
-                                    unfocusedBorderColor = Color(0x33FFFFFF),
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            TextButton(onClick = { currentStep = 1 }) {
-                                Text("Back", color = Color.White.copy(alpha = 0.7f))
-                            }
-                            Button(
-                                onClick = { currentStep = 3 },
-                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Text("Continue", color = Color.Black, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.Black)
-                            }
+                            Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White.copy(alpha = 0.7f))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Back", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
                         }
                     }
-                    3 -> {
-                        // Select Your Vibe
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Text(
-                                text = "Select Your Vibe",
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Choose your glass material and theme palette",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.6f)
-                            )
 
-                            val vibes = listOf(
-                                VibePreset("Sleek Interface", "Warm Amber Orange", "#F27D26"),
-                                VibePreset("Liquid Obsidian", "Neon Cyan & Obsidian", "#00F5D4"),
-                                VibePreset("Cyber Pink", "Neon Pink & Electric", "#FF007A"),
-                                VibePreset("Emerald Wave", "Deep Forest Mint", "#10B981"),
-                                VibePreset("Sunset Gold", "Amber Gold Glow", "#F59E0B"),
-                                VibePreset("Aether White", "Clean Glass", "#6366F1")
-                            )
-
-                            vibes.forEach { vibe ->
-                                VibeCard(
-                                    title = vibe.name,
-                                    subtitle = vibe.desc,
-                                    colorHex = vibe.hex,
-                                    isSelected = selectedVibe == vibe.name,
-                                    onClick = {
-                                        selectedVibe = vibe.name
-                                        selectedVibeHex = vibe.hex
-                                    }
-                                )
+                    Button(
+                        onClick = {
+                            if (currentStep < 3) {
+                                currentStep++
+                            } else {
+                                onSaveProfile(nameInput, selectedAvatar, selectedVibeHex)
                             }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            TextButton(onClick = { currentStep = 2 }) {
-                                Text("Back", color = Color.White.copy(alpha = 0.7f))
-                            }
-                            Button(
-                                onClick = {
-                                    onSaveProfile(nameInput, selectedAvatar, selectedVibeHex)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Text("Finish Setup", color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                        },
+                        modifier = Modifier
+                            .then(if (currentStep == 1) Modifier.fillMaxWidth() else Modifier)
+                            .height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(
+                            text = if (currentStep == 3) "Finish Setup" else "Continue",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = if (currentStep == 3) Icons.Default.Check else Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = Color.Black
+                        )
                     }
                 }
             }
