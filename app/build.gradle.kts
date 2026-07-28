@@ -115,6 +115,7 @@ dependencies {
   // YouTube Extraction & Offline Downloads
   implementation(libs.newpipe.extractor)
   implementation(libs.youtubedl.android)
+  implementation(libs.youtubedl.ffmpeg)
 
   // Security, Biometric, and WorkManager
   implementation(libs.androidx.security.crypto)
