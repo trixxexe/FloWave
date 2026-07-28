@@ -112,7 +112,8 @@ dependencies {
   implementation(libs.androidx.media3.ui)
   implementation(libs.androidx.media3.common)
 
-  // YouTube Extraction
+  // YouTube Extraction & Offline Downloads
+  implementation(libs.newpipe.extractor)
   implementation(libs.youtubedl.android)
 
   // Security, Biometric, and WorkManager

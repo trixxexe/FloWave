@@ -6,20 +6,27 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.trixxexe.trixxwave.data.db.Song
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
-import com.yausername.youtubedl_android.mapper.VideoInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.downloader.Request as NewPipeRequest
+import org.schabi.newpipe.extractor.downloader.Response as NewPipeResponse
+import org.schabi.newpipe.extractor.localization.Localization
+import org.schabi.newpipe.extractor.stream.AudioStream
+import org.schabi.newpipe.extractor.stream.StreamInfo
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
-import org.json.JSONObject
 
 data class StreamExtractionResult(
     val title: String,
@@ -37,7 +44,7 @@ data class CachedStreamEntry(
 ) {
     fun isExpired(): Boolean {
         val currentSec = System.currentTimeMillis() / 1000L
-        return currentSec >= (expireTimeSec - 300L) // Expire 5 mins before YouTube URL TTL
+        return currentSec >= (expireTimeSec - 300L) // Expire 5 mins before TTL
     }
 }
 
@@ -68,11 +75,50 @@ data class PipedSearchWrapper(
     @Json(name = "items") val items: List<PipedSearchItem>?
 )
 
+class NewPipeOkHttpDownloader(private val client: OkHttpClient) : Downloader() {
+    override fun execute(request: NewPipeRequest): NewPipeResponse {
+        val httpMethod = request.httpMethod()
+        val url = request.url()
+        val headers = request.headers()
+        val dataToSend = request.dataToSend()
+
+        val builder = Request.Builder().url(url)
+
+        headers?.forEach { (headerName, headerValues) ->
+            headerValues?.forEach { headerValue ->
+                builder.addHeader(headerName, headerValue)
+            }
+        }
+
+        if (httpMethod.equals("POST", ignoreCase = true)) {
+            val body = dataToSend?.let { it.toRequestBody(null) } ?: ByteArray(0).toRequestBody(null)
+            builder.post(body)
+        } else {
+            builder.get()
+        }
+
+        val response = client.newCall(builder.build()).execute()
+        val responseHeaders = mutableMapOf<String, List<String>>()
+        response.headers.names().forEach { name ->
+            responseHeaders[name] = response.headers.values(name)
+        }
+
+        val bodyString = response.body?.string()
+        return NewPipeResponse(
+            response.code,
+            response.message,
+            responseHeaders,
+            bodyString,
+            response.request.url.toString()
+        )
+    }
+}
+
 class YoutubeStreamRepository(private val context: Context) {
 
     private val TAG = "YoutubeStreamRepo"
 
-    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, CachedStreamEntry>()
+    private val streamCache = ConcurrentHashMap<String, CachedStreamEntry>()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
@@ -81,8 +127,8 @@ class YoutubeStreamRepository(private val context: Context) {
         .build()
 
     private val fastClient = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -94,31 +140,28 @@ class YoutubeStreamRepository(private val context: Context) {
     private val pipedSearchAdapter = moshi.adapter(PipedSearchWrapper::class.java)
 
     @Volatile
-    private var isYtdlInitialized = false
+    private var isNewPipeInitialized = false
 
     init {
-        initYoutubeDL(context)
+        initNewPipe()
     }
 
-    fun initYoutubeDL(appContext: Context) {
-        if (isYtdlInitialized) return
-        try {
-            YoutubeDL.getInstance().init(appContext.applicationContext)
-            isYtdlInitialized = true
-            Log.d(TAG, "On-device YoutubeDL initialized successfully.")
-        } catch (e: Throwable) {
-            Log.w(TAG, "On-device YoutubeDL binary init bypassed; using fast direct stream extraction APIs. Reason: ${e.message}")
+    private fun initNewPipe() {
+        if (isNewPipeInitialized) return
+        synchronized(this) {
+            if (!isNewPipeInitialized) {
+                try {
+                    NewPipe.init(NewPipeOkHttpDownloader(fastClient), Localization.DEFAULT)
+                    isNewPipeInitialized = true
+                    Log.d(TAG, "NewPipeExtractor initialized successfully with OkHttp downloader.")
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to initialize NewPipeExtractor: ${e.message}", e)
+                }
+            }
         }
     }
 
-    suspend fun updateYoutubeDL(appContext: Context): Boolean = withContext(Dispatchers.IO) {
-        try {
-            YoutubeDL.getInstance().updateYoutubeDL(appContext.applicationContext)
-            true
-        } catch (e: Throwable) {
-            false
-        }
-    }
+    suspend fun updateYoutubeDL(appContext: Context): Boolean = true
 
     private fun parseUrlExpiration(streamUrl: String): Long {
         return try {
@@ -127,10 +170,10 @@ class YoutubeStreamRepository(private val context: Context) {
             if (expire != null) {
                 expire.toLong()
             } else {
-                (System.currentTimeMillis() / 1000L) + 14400L // Default 4 hours
+                (System.currentTimeMillis() / 1000L) + 7200L // Default 2 hours
             }
         } catch (_: Exception) {
-            (System.currentTimeMillis() / 1000L) + 14400L
+            (System.currentTimeMillis() / 1000L) + 7200L
         }
     }
 
@@ -193,74 +236,114 @@ class YoutubeStreamRepository(private val context: Context) {
             else -> cleanId
         }
 
-        // 1. Try YouTube Music Innertube API (Multi-Client Contexts: ANDROID_MUSIC, WEB_REMIX, IOS, ANDROID_TESTSUITE)
+        // 1. PRIMARY ENGINE: On-Device NewPipeExtractor
+        if (cleanId.length == 11) {
+            val newPipeResult = tryExtractNewPipe(cleanId)
+            if (newPipeResult != null && newPipeResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Primary Success - NewPipeExtractor] Extracted audio stream for videoId '$cleanId'")
+                cacheResult(cleanId, newPipeResult)
+                return@withContext newPipeResult
+            } else {
+                Log.w(TAG, "[Primary Engine Failed] NewPipeExtractor returned null for '$cleanId'. Running fallbacks...")
+            }
+        }
+
+        // 2. FALLBACK 1: YouTube Music Innertube API
         if (cleanId.length == 11) {
             val youtubeiResult = tryExtractYoutubeiApi(cleanId)
             if (youtubeiResult != null && youtubeiResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Youtubei API extracted streamUrl for videoId '$cleanId'")
+                Log.d(TAG, "[Fallback Success - Youtubei API] Extracted streamUrl for videoId '$cleanId'")
                 cacheResult(cleanId, youtubeiResult)
                 return@withContext youtubeiResult
             }
         }
 
-        // 2. Try Invidious API
+        // 3. FALLBACK 2: Invidious API
         if (cleanId.length == 11) {
             val invidiousResult = tryExtractInvidiousApi(cleanId)
             if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Invidious API extracted streamUrl for videoId '$cleanId'")
+                Log.d(TAG, "[Fallback Success - Invidious API] Extracted streamUrl for videoId '$cleanId'")
                 cacheResult(cleanId, invidiousResult)
                 return@withContext invidiousResult
             }
         }
 
-        // 3. Try Piped API
+        // 4. FALLBACK 3: Piped API
         if (cleanId.length == 11) {
             val pipedResult = tryExtractPipedApi(cleanId)
             if (pipedResult != null && pipedResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Piped API extracted streamUrl for videoId '$cleanId'")
+                Log.d(TAG, "[Fallback Success - Piped API] Extracted streamUrl for videoId '$cleanId'")
                 cacheResult(cleanId, pipedResult)
                 return@withContext pipedResult
             }
         }
 
-        // 4. Try Cobalt API
+        // 5. FALLBACK 4: Cobalt API
         if (cleanId.length == 11) {
             val cobaltResult = tryExtractCobaltApi(cleanId)
             if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Cobalt API extracted streamUrl for videoId '$cleanId'")
+                Log.d(TAG, "[Fallback Success - Cobalt API] Extracted streamUrl for videoId '$cleanId'")
                 cacheResult(cleanId, cobaltResult)
                 return@withContext cobaltResult
             }
         }
 
-        // 5. Try Native On-Device YoutubeDL
-        if (cleanId.length == 11) {
-            val ytdlResult = tryExtractYtdl(cleanId)
-            if (ytdlResult != null && ytdlResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] YoutubeDL extracted streamUrl for videoId '$cleanId'")
-                cacheResult(cleanId, ytdlResult)
-                return@withContext ytdlResult
-            }
-        }
-
-        // 6. Try iTunes Global Preview Stream Engine Fallback
+        // 6. FALLBACK 5: iTunes Global Preview Engine
         val itunesResult = tryExtractItunesFallback(searchTerms)
         if (itunesResult != null && itunesResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] iTunes audio stream extracted for '$searchTerms'")
+            Log.d(TAG, "[Fallback Success - iTunes Preview] Audio stream extracted for '$searchTerms'")
             cacheResult(cleanId, itunesResult)
             return@withContext itunesResult
         }
 
-        // 7. Try Audius Decentralized Audio Stream Engine Fallback
+        // 7. FALLBACK 6: Audius Engine
         val audiusResult = tryExtractAudiusFallback(searchTerms)
         if (audiusResult != null && audiusResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] Audius stream extracted for '$searchTerms'")
+            Log.d(TAG, "[Fallback Success - Audius Engine] Stream extracted for '$searchTerms'")
             cacheResult(cleanId, audiusResult)
             return@withContext audiusResult
         }
 
-        Log.e(TAG, "[Failure] All stream extraction endpoints exhausted for target '$cleanId'")
+        Log.e(TAG, "[Failure] All extraction paths exhausted for target '$cleanId'")
         null
+    }
+
+    private fun tryExtractNewPipe(videoId: String): StreamExtractionResult? {
+        return try {
+            initNewPipe()
+            val videoUrl = if (videoId.startsWith("http")) videoId else "https://www.youtube.com/watch?v=$videoId"
+            val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+
+            val audioStreams: List<AudioStream> = streamInfo.audioStreams ?: emptyList()
+            if (audioStreams.isEmpty()) return null
+
+            val bestAudio = audioStreams
+                .filter { !it.url.isNullOrBlank() }
+                .maxByOrNull { it.averageBitrate.takeIf { b -> b > 0 } ?: it.bitrate }
+                ?: audioStreams.firstOrNull { !it.url.isNullOrBlank() }
+
+            val streamUrl = bestAudio?.url ?: return null
+
+            val title = streamInfo.name ?: "YouTube Track"
+            val uploader = streamInfo.uploaderName ?: "YouTube Artist"
+            val durationMs = streamInfo.duration * 1000L
+            val artworkUrl = streamInfo.thumbnails?.lastOrNull()?.url ?: "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
+            val format = bestAudio.format?.mimeType ?: "audio/m4a"
+
+            Log.d(TAG, "[NewPipeExtractor] Stream resolved: '$title' by '$uploader', format: $format, bitrate: ${bestAudio.averageBitrate}")
+
+            StreamExtractionResult(
+                title = title,
+                artist = uploader,
+                durationMs = durationMs,
+                artworkUrl = artworkUrl,
+                streamUrl = streamUrl,
+                format = format
+            )
+        } catch (e: Throwable) {
+            Log.w(TAG, "NewPipeExtractor extraction exception for '$videoId': ${e.message}", e)
+            null
+        }
     }
 
     private fun tryExtractYoutubeiApi(videoId: String): StreamExtractionResult? {
@@ -273,10 +356,7 @@ class YoutubeStreamRepository(private val context: Context) {
         val clients = listOf(
             Triple("ANDROID_MUSIC", "6.42.52", "com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 13; en_US)"),
             Triple("WEB_REMIX", "1.20240422.01.00", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
-            Triple("IOS", "19.29.1", "com.google.ios.youtube/19.29.1 (iPhone14,3; U; CPU iOS 17_5_1 like Mac OS X; en_US)"),
-            Triple("ANDROID_TESTSUITE", "1.9", "Mozilla/5.0 (Linux; Android 11; Pixel 5)"),
-            Triple("TVHTML5_SIMPLY_EMBEDDED_PLAYER", "2.0", "Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV)"),
-            Triple("MWEB", "2.20240422.01.00", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1")
+            Triple("IOS", "19.29.1", "com.google.ios.youtube/19.29.1 (iPhone14,3; U; CPU iOS 17_5_1 like Mac OS X; en_US)")
         )
 
         for (endpoint in playerUrls) {
@@ -288,35 +368,13 @@ class YoutubeStreamRepository(private val context: Context) {
                             put("client", JSONObject().apply {
                                 put("clientName", clientName)
                                 put("clientVersion", clientVersion)
-                                if (clientName == "ANDROID_MUSIC" || clientName == "ANDROID") {
-                                    put("androidSdkVersion", 33)
-                                } else if (clientName == "IOS") {
-                                    put("osName", "iOS")
-                                    put("osVersion", "17.5.1")
-                                    put("deviceModel", "iPhone14,3")
-                                } else if (clientName == "WEB_REMIX") {
-                                    put("osName", "Windows")
-                                    put("osVersion", "10.0")
-                                }
                             })
                         })
                     }.toString()
 
-                    val clientIdHeader = when(clientName) {
-                        "ANDROID_MUSIC" -> "21"
-                        "WEB_REMIX" -> "67"
-                        "IOS" -> "26"
-                        "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> "85"
-                        else -> "1"
-                    }
-
                     val req = Request.Builder()
                         .url(endpoint)
                         .header("User-Agent", userAgent)
-                        .header("X-YouTube-Client-Name", clientIdHeader)
-                        .header("X-YouTube-Client-Version", clientVersion)
-                        .header("Origin", "https://music.youtube.com")
-                        .header("Referer", "https://music.youtube.com/")
                         .header("Content-Type", "application/json")
                         .post(payload.toRequestBody(mediaType))
                         .build()
@@ -333,38 +391,25 @@ class YoutubeStreamRepository(private val context: Context) {
 
                         val streamingData = jsonObj.optJSONObject("streamingData") ?: return@use
                         val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats")
-                        val formats = streamingData.optJSONArray("formats")
 
                         var bestStreamUrl: String? = null
                         var highestBitrate = 0
                         var bestMime = "audio/mp4"
 
-                        fun checkFormatArray(arr: org.json.JSONArray?) {
-                            if (arr == null) return
-                            for (i in 0 until arr.length()) {
-                                val fmt = arr.getJSONObject(i)
+                        if (adaptiveFormats != null) {
+                            for (i in 0 until adaptiveFormats.length()) {
+                                val fmt = adaptiveFormats.getJSONObject(i)
                                 val mimeType = fmt.optString("mimeType")
-                                var url = fmt.optString("url")
-                                if (url.isBlank()) {
-                                    val cipher = fmt.optString("cipher").ifBlank { fmt.optString("signatureCipher") }
-                                    if (cipher.isNotBlank()) {
-                                        url = parseCipherUrl(cipher)
-                                    }
-                                }
+                                val url = fmt.optString("url")
                                 val bitrate = fmt.optInt("bitrate", 0)
 
-                                if (mimeType.contains("audio") && url.isNotBlank()) {
-                                    if (bitrate > highestBitrate) {
-                                        highestBitrate = bitrate
-                                        bestStreamUrl = url
-                                        bestMime = mimeType
-                                    }
+                                if (mimeType.contains("audio") && url.isNotBlank() && bitrate > highestBitrate) {
+                                    highestBitrate = bitrate
+                                    bestStreamUrl = url
+                                    bestMime = mimeType
                                 }
                             }
                         }
-
-                        checkFormatArray(adaptiveFormats)
-                        checkFormatArray(formats)
 
                         if (!bestStreamUrl.isNullOrBlank()) {
                             return StreamExtractionResult(
@@ -385,61 +430,12 @@ class YoutubeStreamRepository(private val context: Context) {
         return null
     }
 
-    private fun parseCipherUrl(cipher: String): String {
-        return try {
-            val pairs = cipher.split("&")
-            var url: String? = null
-            for (pair in pairs) {
-                val parts = pair.split("=", limit = 2)
-                if (parts.size == 2 && parts[0] == "url") {
-                    url = java.net.URLDecoder.decode(parts[1], "UTF-8")
-                    break
-                }
-            }
-            url ?: ""
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
-    private fun tryExtractYtdl(videoId: String): StreamExtractionResult? {
-        return try {
-            val fullUrl = if (videoId.startsWith("http")) videoId else "https://www.youtube.com/watch?v=$videoId"
-            val request = YoutubeDLRequest(fullUrl).apply {
-                addOption("-f", "bestaudio/best")
-            }
-            val videoInfo: VideoInfo = YoutubeDL.getInstance().getInfo(request) ?: return null
-
-            val title = videoInfo.title ?: "YouTube Track"
-            val uploader = videoInfo.uploader ?: "YouTube Artist"
-            val durationSec = videoInfo.duration.toLong()
-            val streamUrl = videoInfo.url ?: return null
-            val thumbnail = videoInfo.thumbnail
-            val ext = videoInfo.ext ?: "m4a"
-
-            StreamExtractionResult(
-                title = title,
-                artist = uploader,
-                durationMs = durationSec * 1000L,
-                artworkUrl = thumbnail,
-                streamUrl = streamUrl,
-                format = ext
-            )
-        } catch (e: Throwable) {
-            Log.w(TAG, "YTDL extraction attempted and bypassed: ${e.message}")
-            null
-        }
-    }
-
     private fun tryExtractInvidiousApi(videoId: String): StreamExtractionResult? {
         val cleanId = extractVideoId(videoId) ?: videoId
         val invidiousInstances = listOf(
             "https://invidious.flokinet.to",
             "https://invidious.nerdvpn.de",
-            "https://inv.tux.pizza",
-            "https://vid.puffyan.us",
-            "https://invidious.drgns.space",
-            "https://invidious.projectsegfau.lt"
+            "https://inv.tux.pizza"
         )
 
         for (host in invidiousInstances) {
@@ -470,12 +466,10 @@ class YoutubeStreamRepository(private val context: Context) {
                             val url = fmt.optString("url")
                             val bitrate = fmt.optInt("bitrate", 0)
 
-                            if (type.startsWith("audio/") && url.isNotBlank()) {
-                                if (bitrate > highestBitrate) {
-                                    highestBitrate = bitrate
-                                    bestAudioUrl = url
-                                    bestFormat = type
-                                }
+                            if (type.startsWith("audio/") && url.isNotBlank() && bitrate > highestBitrate) {
+                                highestBitrate = bitrate
+                                bestAudioUrl = url
+                                bestFormat = type
                             }
                         }
 
@@ -502,10 +496,7 @@ class YoutubeStreamRepository(private val context: Context) {
         val cleanId = extractVideoId(videoId) ?: videoId
         val pipedApis = listOf(
             "https://pipedapi.kavin.rocks/streams/",
-            "https://api.piped.video/streams/",
-            "https://pipedapi.mha.fi/streams/",
-            "https://pipedapi.drgns.space/streams/",
-            "https://pipedapi.col2.metube.fr/streams/"
+            "https://api.piped.video/streams/"
         )
 
         for (apiBase in pipedApis) {
@@ -554,7 +545,6 @@ class YoutubeStreamRepository(private val context: Context) {
                     .url(baseUrl)
                     .header("Accept", "application/json")
                     .header("Content-Type", "application/json")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .post(body)
                     .build()
 
@@ -563,7 +553,7 @@ class YoutubeStreamRepository(private val context: Context) {
                     val jsonObj = JSONObject(respStr)
                     val status = jsonObj.optString("status")
                     val streamUrl = jsonObj.optString("url")
-                    if ((status == "stream" || status == "redirect" || status == "picker" || status == "tunnel") && streamUrl.isNotBlank()) {
+                    if ((status == "stream" || status == "redirect" || status == "tunnel") && streamUrl.isNotBlank()) {
                         return StreamExtractionResult(
                             title = "YouTube Audio ($cleanId)",
                             artist = "YouTube",
@@ -620,13 +610,18 @@ class YoutubeStreamRepository(private val context: Context) {
             return@withContext listOf(singleSong)
         }
 
-        val encoded = java.net.URLEncoder.encode(trimmedQuery, "UTF-8")
+        // 1. Primary Search Engine: NewPipeExtractor
+        val newPipeResults = trySearchNewPipe(trimmedQuery)
+        if (newPipeResults.isNotEmpty()) {
+            Log.d(TAG, "[Primary Search Success - NewPipeExtractor] Found ${newPipeResults.size} tracks for '$trimmedQuery'")
+            return@withContext newPipeResults
+        }
 
-        // 1. Try Piped Search API Instances
+        // 2. Fallback Search Engine: Piped
+        val encoded = java.net.URLEncoder.encode(trimmedQuery, "UTF-8")
         val pipedSearchUrls = listOf(
             "https://pipedapi.kavin.rocks/search?q=$encoded&filter=videos",
-            "https://api.piped.video/search?q=$encoded&filter=videos",
-            "https://pipedapi.mha.fi/search?q=$encoded&filter=videos"
+            "https://api.piped.video/search?q=$encoded&filter=videos"
         )
 
         for (searchUrl in pipedSearchUrls) {
@@ -640,9 +635,9 @@ class YoutubeStreamRepository(private val context: Context) {
                     if (!response.isSuccessful) return@use
                     val body = response.body?.string() ?: return@use
                     val wrapper = pipedSearchAdapter.fromJson(body)
-                    val items = wrapper?.items ?: parsePipedSearchItemsManual(body)
+                    val items = wrapper?.items ?: emptyList()
 
-                    if (!items.isNullOrEmpty()) {
+                    if (items.isNotEmpty()) {
                         val results = items.mapIndexedNotNull { _, item ->
                             val rawUrl = item.url ?: return@mapIndexedNotNull null
                             val videoId = extractVideoId(rawUrl) ?: return@mapIndexedNotNull null
@@ -668,48 +663,7 @@ class YoutubeStreamRepository(private val context: Context) {
             } catch (_: Exception) {}
         }
 
-        // 2. Try Invidious Search API Instances
-        val invidiousSearchUrls = listOf(
-            "https://invidious.flokinet.to/api/v1/search?q=$encoded&type=video",
-            "https://invidious.nerdvpn.de/api/v1/search?q=$encoded&type=video",
-            "https://vid.puffyan.us/api/v1/search?q=$encoded&type=video"
-        )
-
-        for (searchUrl in invidiousSearchUrls) {
-            try {
-                val req = Request.Builder()
-                    .url(searchUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                    .build()
-
-                client.newCall(req).execute().use { response ->
-                    if (!response.isSuccessful) return@use
-                    val body = response.body?.string() ?: return@use
-                    val results = parseInvidiousSearchManual(body)
-                    if (results.isNotEmpty()) return@withContext results
-                }
-            } catch (_: Exception) {}
-        }
-
-        // 3. Fallback: YouTube Web Search Scraper
-        try {
-            val scraperUrl = "https://www.youtube.com/results?search_query=$encoded"
-            val req = Request.Builder()
-                .url(scraperUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .build()
-
-            client.newCall(req).execute().use { response ->
-                val html = response.body?.string()
-                if (!html.isNullOrBlank()) {
-                    val results = parseYoutubeHtmlSearchResults(html)
-                    if (results.isNotEmpty()) return@withContext results
-                }
-            }
-        } catch (_: Exception) {}
-
-        // 4. Fallback: iTunes Search API for guaranteed music results
+        // 3. Fallback Search Engine: iTunes Search API
         try {
             val url = URL("https://itunes.apple.com/search?term=$encoded&entity=song&limit=15")
             val conn = url.openConnection() as HttpURLConnection
@@ -756,89 +710,31 @@ class YoutubeStreamRepository(private val context: Context) {
         emptyList()
     }
 
-    private fun parsePipedSearchItemsManual(jsonStr: String): List<PipedSearchItem> {
-        val list = mutableListOf<PipedSearchItem>()
-        try {
-            val videoIdPattern = Pattern.compile("\"url\":\"([^\"]+)\"")
-            val titlePattern = Pattern.compile("\"title\":\"([^\"]+)\"")
-            val uploaderPattern = Pattern.compile("\"uploaderName\":\"([^\"]+)\"")
+    private fun trySearchNewPipe(query: String): List<Song> {
+        return try {
+            initNewPipe()
+            val searchExtractor = ServiceList.YouTube.getSearchExtractor(query, listOf("videos"), "")
+            searchExtractor.fetchPage()
+            val items = searchExtractor.initialPage?.items ?: emptyList()
 
-            val vMatcher = videoIdPattern.matcher(jsonStr)
-            val tMatcher = titlePattern.matcher(jsonStr)
-            val uMatcher = uploaderPattern.matcher(jsonStr)
+            val songs = mutableListOf<Song>()
+            for (item in items) {
+                if (item is StreamInfoItem) {
+                    val videoUrl = item.url ?: continue
+                    val videoId = extractVideoId(videoUrl) ?: continue
+                    val title = item.name ?: "YouTube Track"
+                    val uploader = item.uploaderName ?: "YouTube Music"
+                    val durationSec = item.duration
+                    val durationMs = if (durationSec > 0) durationSec * 1000L else 200000L
+                    val thumbnail = item.thumbnails?.lastOrNull()?.url ?: "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
 
-            while (vMatcher.find()) {
-                val url = vMatcher.group(1)
-                val title = if (tMatcher.find()) tMatcher.group(1) else "YouTube Track"
-                val uploader = if (uMatcher.find()) uMatcher.group(1) else "YouTube Artist"
-                list.add(
-                    PipedSearchItem(
-                        url = url,
-                        title = title,
-                        uploaderName = uploader,
-                        duration = 180L,
-                        thumbnail = null
-                    )
-                )
-            }
-        } catch (_: Exception) {}
-        return list
-    }
-
-    private fun parseInvidiousSearchManual(jsonStr: String): List<Song> {
-        val songs = mutableListOf<Song>()
-        try {
-            val pattern = Pattern.compile("\"videoId\":\"([a-zA-Z0-9_-]{11})\".*?\"title\":\"([^\"]+)\".*?\"author\":\"([^\"]+)\"")
-            val matcher = pattern.matcher(jsonStr)
-            var idx = 0
-            while (matcher.find() && idx < 20) {
-                val videoId = matcher.group(1)
-                val title = matcher.group(2)
-                val author = matcher.group(3)
-                val thumbnail = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
-
-                songs.add(
-                    Song(
-                        id = -3000000000L - (videoId.hashCode().toLong().and(0x7FFFFFFF)),
-                        title = title,
-                        artist = author,
-                        album = "YouTube Search",
-                        durationMs = 180000L,
-                        filePath = "https://www.youtube.com/watch?v=$videoId",
-                        albumArtUri = thumbnail,
-                        genre = "YouTube Stream",
-                        source = "YOUTUBE_EXTRACTED",
-                        streamUrl = null,
-                        originalUrl = "https://www.youtube.com/watch?v=$videoId"
-                    )
-                )
-                idx++
-            }
-        } catch (_: Exception) {}
-        return songs
-    }
-
-    private fun parseYoutubeHtmlSearchResults(html: String): List<Song> {
-        val songs = mutableListOf<Song>()
-        try {
-            val pattern = Pattern.compile("\"videoId\":\"([a-zA-Z0-9_-]{11})\".*?\"title\":\\{\"runs\":\\[\\{\"text\":\"([^\"]+)\"")
-            val matcher = pattern.matcher(html)
-            val seenIds = mutableSetOf<String>()
-            var idx = 0
-
-            while (matcher.find() && idx < 20) {
-                val videoId = matcher.group(1) ?: continue
-                val title = matcher.group(2) ?: "YouTube Track"
-
-                if (seenIds.add(videoId)) {
-                    val thumbnail = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
                     songs.add(
                         Song(
                             id = -3000000000L - (videoId.hashCode().toLong().and(0x7FFFFFFF)),
                             title = title,
-                            artist = "YouTube Music",
+                            artist = uploader,
                             album = "YouTube Search",
-                            durationMs = 200000L,
+                            durationMs = durationMs,
                             filePath = "https://www.youtube.com/watch?v=$videoId",
                             albumArtUri = thumbnail,
                             genre = "YouTube Stream",
@@ -847,11 +743,13 @@ class YoutubeStreamRepository(private val context: Context) {
                             originalUrl = "https://www.youtube.com/watch?v=$videoId"
                         )
                     )
-                    idx++
                 }
             }
-        } catch (_: Exception) {}
-        return songs
+            songs
+        } catch (e: Throwable) {
+            Log.w(TAG, "NewPipe search failed for '$query': ${e.message}")
+            emptyList()
+        }
     }
 
     private fun tryExtractItunesFallback(query: String): StreamExtractionResult? {

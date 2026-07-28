@@ -20,6 +20,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
@@ -48,6 +49,7 @@ import com.trixxexe.trixxwave.ui.components.glass.OverlayPermissionDialog
 import com.trixxexe.trixxwave.ui.components.glass.PlaylistDetailDialog
 import com.trixxexe.trixxwave.ui.components.glass.TopGlassmorphicClock
 import com.trixxexe.trixxwave.ui.components.glass.getThemeAccentColor
+import com.trixxexe.trixxwave.ui.components.glass.liquidGlass
 import com.trixxexe.trixxwave.ui.screens.*
 import com.trixxexe.trixxwave.ui.theme.TrixxWaveTheme
 import com.trixxexe.trixxwave.ui.viewmodel.MainViewModel
@@ -154,6 +156,8 @@ class MainActivity : ComponentActivity() {
             val isOnlineSearchLoading by mainViewModel.isOnlineSearchLoading.collectAsState()
             val onlineStreamError by mainViewModel.onlineStreamError.collectAsState()
             val downloadStatusMap by mainViewModel.downloadStatusMap.collectAsState()
+            val downloadStatusTextMap by mainViewModel.downloadStatusTextMap.collectAsState()
+            val downloadErrorMap by mainViewModel.downloadErrorMap.collectAsState()
 
             val permissionsToRequest = remember {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -263,15 +267,33 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         containerColor = Color.Transparent,
                         topBar = {
-                            if (currentRoute != "onboarding") {
-                                Box(
+                            if (currentRoute != "onboarding" && currentRoute != "downloads") {
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .statusBarsPadding()
-                                        .padding(top = 4.dp),
-                                    contentAlignment = Alignment.Center
+                                        .padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    TopGlassmorphicClock(themeConfig = themeConfig)
+                                    Spacer(modifier = Modifier.size(36.dp))
+                                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                        TopGlassmorphicClock(themeConfig = themeConfig)
+                                    }
+                                    IconButton(
+                                        onClick = { navController.navigate("downloads") },
+                                        modifier = Modifier
+                                            .testTag("top_bar_download_button")
+                                            .size(36.dp)
+                                            .liquidGlass(themeConfig = themeConfig, cornerRadius = 18.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Download,
+                                            contentDescription = "Downloads",
+                                            tint = Color(0xFF00F0FF),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         },
@@ -444,6 +466,25 @@ class MainActivity : ComponentActivity() {
                                 PlaybackServiceEqualizerScreen(
                                     playbackService = playbackService,
                                     themeConfig = themeConfig,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
+                            composable("downloads") {
+                                val downloadedSongs = remember(allSongs) {
+                                    allSongs.filter { it.source == "DOWNLOADED" || it.filePath.contains("/downloads/") }
+                                }
+                                DownloadScreen(
+                                    themeConfig = themeConfig,
+                                    downloadedSongs = downloadedSongs,
+                                    searchResults = youtubeResults,
+                                    isSearchLoading = isOnlineSearchLoading,
+                                    downloadProgressMap = downloadStatusMap,
+                                    downloadStatusTextMap = downloadStatusTextMap,
+                                    downloadErrorMap = downloadErrorMap,
+                                    onSearch = { q -> mainViewModel.searchYoutube(q) },
+                                    onDownloadTrack = { song -> mainViewModel.downloadOnlineSong(song) },
+                                    onDeleteDownloadedSong = { song -> mainViewModel.deleteDownloadedSong(song) },
+                                    onPlaySong = { song -> mainViewModel.playSong(song) },
                                     onBack = { navController.popBackStack() }
                                 )
                             }

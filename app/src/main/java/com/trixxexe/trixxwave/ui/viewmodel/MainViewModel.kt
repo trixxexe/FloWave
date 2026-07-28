@@ -710,130 +710,78 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _downloadStatusMap = MutableStateFlow<Map<Long, Float>>(emptyMap())
     val downloadStatusMap: StateFlow<Map<Long, Float>> = _downloadStatusMap.asStateFlow()
 
+    private val _downloadStatusTextMap = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val downloadStatusTextMap: StateFlow<Map<Long, String>> = _downloadStatusTextMap.asStateFlow()
+
+    private val _downloadErrorMap = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val downloadErrorMap: StateFlow<Map<Long, String>> = _downloadErrorMap.asStateFlow()
+
+    val youtubeDownloadManager by lazy {
+        com.trixxexe.trixxwave.data.api.YoutubeDownloadManager(app, youtubeRepo)
+    }
+
     fun downloadOnlineSong(song: Song) {
         viewModelScope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(app, "Downloading '${song.title}'...", android.widget.Toast.LENGTH_SHORT).show()
+            _downloadErrorMap.value = _downloadErrorMap.value - song.id
+            _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 0.05f)
+            _downloadStatusTextMap.value = _downloadStatusTextMap.value + (song.id to "Starting download...")
+
+            val result = youtubeDownloadManager.downloadAudioTrack(song) { progress, status ->
+                _downloadStatusMap.value = _downloadStatusMap.value + (song.id to progress)
+                _downloadStatusTextMap.value = _downloadStatusTextMap.value + (song.id to status)
             }
+
+            when (result) {
+                is com.trixxexe.trixxwave.data.api.DownloadResult.Success -> {
+                    val downloadedSong = result.song
+                    val targetDbId = if (song.id < 0) 0L else song.id
+                    val songToInsert = downloadedSong.copy(id = targetDbId)
+
+                    val insertedId = songDao.insertSong(songToInsert)
+                    val finalSong = songToInsert.copy(id = if (insertedId > 0) insertedId else songToInsert.id)
+
+                    val current = _currentSong.value
+                    if (current != null && (current.id == song.id || (current.title.equals(song.title, ignoreCase = true) && current.artist.equals(song.artist, ignoreCase = true)))) {
+                        _currentSong.value = finalSong
+                    }
+
+                    _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 1.0f)
+                    _downloadStatusTextMap.value = _downloadStatusTextMap.value + (song.id to "Completed!")
+
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(app, "Downloaded '${song.title}' for offline play!", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+
+                    kotlinx.coroutines.delay(1500L)
+                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
+                    _downloadStatusTextMap.value = _downloadStatusTextMap.value - song.id
+                }
+                is com.trixxexe.trixxwave.data.api.DownloadResult.Failed -> {
+                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
+                    _downloadStatusTextMap.value = _downloadStatusTextMap.value - song.id
+                    _downloadErrorMap.value = _downloadErrorMap.value + (song.id to result.errorMessage)
+
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(app, "Download failed: ${result.errorMessage}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    fun deleteDownloadedSong(song: Song) {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 0.05f)
-                
-                // Extract a verified direct audio stream URL
-                val extracted = youtubeRepo.extractAudioStream(
-                    urlOrQuery = song.originalUrl ?: song.filePath,
-                    songTitle = song.title,
-                    songArtist = song.artist
-                )
-                val targetStreamUrl = extracted?.streamUrl ?: song.streamUrl ?: song.filePath
-
-                if (targetStreamUrl.isBlank() || targetStreamUrl.startsWith("/")) {
-                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
-                    withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(app, "Unable to resolve stream URL for '${song.title}'", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
+                val file = java.io.File(song.filePath)
+                if (file.exists()) {
+                    file.delete()
                 }
-
-                val downloadDir = java.io.File(app.filesDir, "downloads").apply { mkdirs() }
-                val cleanFileName = "${System.currentTimeMillis()}_${song.title.replace(Regex("[^a-zA-Z0-9_-]"), "_")}.mp3"
-                val destFile = java.io.File(downloadDir, cleanFileName)
-
-                val req = okhttp3.Request.Builder()
-                    .url(targetStreamUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .build()
-
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .followRedirects(true)
-                    .followSslRedirects(true)
-                    .build()
-
-                client.newCall(req).execute().use { response ->
-                    if (!response.isSuccessful || response.body == null) {
-                        _downloadStatusMap.value = _downloadStatusMap.value - song.id
-                        withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(app, "Download failed (HTTP ${response.code})", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                        return@launch
-                    }
-                    val body = response.body!!
-                    val totalBytes = body.contentLength()
-                    var downloadedBytes = 0L
-
-                    body.byteStream().use { input ->
-                        destFile.outputStream().use { output ->
-                            val buffer = ByteArray(16384)
-                            var read: Int
-                            while (input.read(buffer).also { read = it } != -1) {
-                                output.write(buffer, 0, read)
-                                downloadedBytes += read
-                                val progress = if (totalBytes > 0) {
-                                    (downloadedBytes.toFloat() / totalBytes).coerceIn(0.05f, 0.98f)
-                                } else {
-                                    (((downloadedBytes / 102400L) % 10) + 1) / 10f
-                                }
-                                _downloadStatusMap.value = _downloadStatusMap.value + (song.id to progress)
-                            }
-                        }
-                    }
-                }
-
-                // Verify downloaded file content (must be audio bytes, not HTML error pages)
-                if (!destFile.exists() || destFile.length() < 5000L) {
-                    destFile.delete()
-                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
-                    withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(app, "Downloaded file is invalid or corrupted. Please try again.", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-
-                val headerBytes = destFile.inputStream().use { input ->
-                    val buf = ByteArray(200)
-                    val n = input.read(buf)
-                    if (n > 0) String(buf, 0, n, Charsets.UTF_8) else ""
-                }
-                if (headerBytes.contains("<!DOCTYPE", ignoreCase = true) || headerBytes.contains("<html", ignoreCase = true) || headerBytes.contains("403 Forbidden", ignoreCase = true)) {
-                    destFile.delete()
-                    _downloadStatusMap.value = _downloadStatusMap.value - song.id
-                    withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(app, "Download blocked by server. Trying alternate link...", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-
-                val targetDbId = if (song.id < 0) 0L else song.id
-                val updatedSong = song.copy(
-                    id = targetDbId,
-                    filePath = destFile.absolutePath,
-                    source = "DOWNLOADED",
-                    streamUrl = destFile.absolutePath,
-                    albumArtUri = extracted?.artworkUrl ?: song.albumArtUri
-                )
-                
-                val insertedId = songDao.insertSong(updatedSong)
-                val finalSong = updatedSong.copy(id = if (insertedId > 0) insertedId else updatedSong.id)
-
-                val current = _currentSong.value
-                if (current != null && (current.id == song.id || (current.title.equals(song.title, ignoreCase = true) && current.artist.equals(song.artist, ignoreCase = true)))) {
-                    _currentSong.value = finalSong
-                }
-
-                _downloadStatusMap.value = _downloadStatusMap.value + (song.id to 1.0f)
+                songDao.deleteSong(song)
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(app, "Downloaded '${song.title}' to Offline Library!", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(app, "Deleted '${song.title}' from downloads.", android.widget.Toast.LENGTH_SHORT).show()
                 }
-                kotlinx.coroutines.delay(1200L)
-                _downloadStatusMap.value = _downloadStatusMap.value - song.id
-
             } catch (e: Exception) {
                 e.printStackTrace()
-                _downloadStatusMap.value = _downloadStatusMap.value - song.id
-                withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(app, "Download failed: ${e.localizedMessage ?: "Network error"}", android.widget.Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
