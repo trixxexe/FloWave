@@ -64,6 +64,9 @@ class PlayerManager(private val context: Context) {
     private val _currentDuration = MutableStateFlow(0L)
     val currentDuration: StateFlow<Long> = _currentDuration.asStateFlow()
 
+    private val _volume = MutableStateFlow(1.0f)
+    val volume: StateFlow<Float> = _volume.asStateFlow()
+
     suspend fun initialize() {
         if (controller != null) return
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -114,6 +117,12 @@ class PlayerManager(private val context: Context) {
 
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs)
+    }
+
+    fun setVolume(vol: Float) {
+        val clamped = vol.coerceIn(0f, 1f)
+        _volume.value = clamped
+        controller?.volume = clamped
     }
 
     fun release() {

@@ -36,5 +36,34 @@
                 <action android:name="androidx.media3.session.MediaSessionService"/>
             </intent-filter>
         </service>
+
+        <!-- App Widget Provider -->
+        <receiver
+            android:name=".widget.FloWaveWidgetProvider"
+            android:exported="true"
+            android:label="FloWave Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.trixxexe.trixxwave.ACTION_PLAY_PAUSE" />
+                <action android:name="com.trixxexe.trixxwave.ACTION_NEXT" />
+                <action android:name="com.trixxexe.trixxwave.ACTION_PREV" />
+                <action android:name="com.trixxexe.trixxwave.ACTION_UPDATE_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/flowave_widget_info" />
+        </receiver>
+
+        <!-- Quick Settings Tile -->
+        <service
+            android:name=".service.FloWaveTileService"
+            android:exported="true"
+            android:icon="@android:drawable/ic_media_play"
+            android:label="FloWave"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

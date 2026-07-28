@@ -37,7 +37,13 @@ data class ThemeConfig(
     val autoScanGaplessOnImport: Boolean = true,
     val trackTransitionAnimation: String = "Crossfade",
     val staticBlurMode: Boolean = false,
-    val autoResumeEnabled: Boolean = true
+    val autoResumeEnabled: Boolean = true,
+    val userName: String = "Main Listener",
+    val userAvatar: String = "Male 1",
+    val aiProvider: String = "Groq",
+    val aiApiKey: String = "",
+    val aiModel: String = "llama-3.3-70b-versatile",
+    val pureAmoledBlack: Boolean = false
 )
 
 class ThemePreferencesRepository(private val context: Context) {
@@ -74,6 +80,12 @@ class ThemePreferencesRepository(private val context: Context) {
         val AUTO_RESUME_ENABLED = booleanPreferencesKey("auto_resume_enabled")
         val LAST_PLAYED_SONG_ID = longPreferencesKey("last_played_song_id")
         val LAST_SEEK_POSITION_MS = longPreferencesKey("last_seek_position_ms")
+        val USER_NAME = stringPreferencesKey("user_name")
+        val USER_AVATAR = stringPreferencesKey("user_avatar")
+        val AI_PROVIDER = stringPreferencesKey("ai_provider")
+        val AI_API_KEY = stringPreferencesKey("ai_api_key")
+        val AI_MODEL = stringPreferencesKey("ai_model")
+        val PURE_AMOLED_BLACK = booleanPreferencesKey("pure_amoled_black")
     }
 
     val isFirstRunFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -115,7 +127,13 @@ class ThemePreferencesRepository(private val context: Context) {
             autoScanGaplessOnImport = prefs[PreferenceKeys.AUTO_SCAN_GAPLESS_ON_IMPORT] ?: true,
             trackTransitionAnimation = prefs[PreferenceKeys.TRACK_TRANSITION_ANIMATION] ?: "Crossfade",
             staticBlurMode = prefs[PreferenceKeys.STATIC_BLUR_MODE] ?: false,
-            autoResumeEnabled = prefs[PreferenceKeys.AUTO_RESUME_ENABLED] ?: true
+            autoResumeEnabled = prefs[PreferenceKeys.AUTO_RESUME_ENABLED] ?: true,
+            userName = prefs[PreferenceKeys.USER_NAME] ?: "Main Listener",
+            userAvatar = prefs[PreferenceKeys.USER_AVATAR] ?: "Male 1",
+            aiProvider = prefs[PreferenceKeys.AI_PROVIDER] ?: "Groq",
+            aiApiKey = prefs[PreferenceKeys.AI_API_KEY] ?: "",
+            aiModel = prefs[PreferenceKeys.AI_MODEL] ?: "llama-3.3-70b-versatile",
+            pureAmoledBlack = prefs[PreferenceKeys.PURE_AMOLED_BLACK] ?: false
         )
     }
 
@@ -331,6 +349,32 @@ class ThemePreferencesRepository(private val context: Context) {
     suspend fun setWidgetShowWaveform(show: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[PreferenceKeys.WIDGET_SHOW_WAVEFORM] = show
+        }
+    }
+
+    suspend fun setUserProfile(name: String, avatar: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.USER_NAME] = name
+            prefs[PreferenceKeys.USER_AVATAR] = avatar
+        }
+    }
+
+    suspend fun setPureAmoledBlack(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.PURE_AMOLED_BLACK] = enabled
+            if (enabled) {
+                prefs[PreferenceKeys.MODE] = "AMOLED"
+            } else {
+                prefs[PreferenceKeys.MODE] = "Dark"
+            }
+        }
+    }
+
+    suspend fun setAiConfig(provider: String, apiKey: String, model: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.AI_PROVIDER] = provider
+            prefs[PreferenceKeys.AI_API_KEY] = apiKey
+            prefs[PreferenceKeys.AI_MODEL] = model
         }
     }
 
