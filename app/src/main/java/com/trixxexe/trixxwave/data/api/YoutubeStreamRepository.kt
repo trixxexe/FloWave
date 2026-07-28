@@ -193,45 +193,57 @@ class YoutubeStreamRepository(private val context: Context) {
             else -> cleanId
         }
 
-        // 1. Try High-Fidelity JioSaavn Direct Stream Engine (Instant 100% Uptime 320kbps MP4/AAC Streams)
-        val saavnResult = tryExtractJioSaavnApi(searchTerms)
-        if (saavnResult != null && saavnResult.streamUrl.isNotBlank()) {
-            Log.d(TAG, "[Success] JioSaavn audio stream extracted for '$searchTerms'")
-            cacheResult(cleanId, saavnResult)
-            return@withContext saavnResult
-        }
-
-        // 2. Try YouTube Music Innertube API (Multi-Client Contexts: ANDROID_MUSIC, WEB_REMIX, IOS, ANDROID_TESTSUITE)
+        // 1. Try YouTube Music Innertube API (Multi-Client Contexts: ANDROID_MUSIC, WEB_REMIX, IOS, ANDROID_TESTSUITE)
         if (cleanId.length == 11) {
             val youtubeiResult = tryExtractYoutubeiApi(cleanId)
             if (youtubeiResult != null && youtubeiResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Youtubei API extracted streamUrl")
+                Log.d(TAG, "[Success] Youtubei API extracted streamUrl for videoId '$cleanId'")
                 cacheResult(cleanId, youtubeiResult)
                 return@withContext youtubeiResult
             }
         }
 
-        // 3. Try Invidious API
+        // 2. Try Invidious API
         if (cleanId.length == 11) {
             val invidiousResult = tryExtractInvidiousApi(cleanId)
             if (invidiousResult != null && invidiousResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Invidious API extracted streamUrl")
+                Log.d(TAG, "[Success] Invidious API extracted streamUrl for videoId '$cleanId'")
                 cacheResult(cleanId, invidiousResult)
                 return@withContext invidiousResult
             }
         }
 
-        // 4. Try Piped API
+        // 3. Try Piped API
         if (cleanId.length == 11) {
             val pipedResult = tryExtractPipedApi(cleanId)
             if (pipedResult != null && pipedResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Piped API extracted streamUrl")
+                Log.d(TAG, "[Success] Piped API extracted streamUrl for videoId '$cleanId'")
                 cacheResult(cleanId, pipedResult)
                 return@withContext pipedResult
             }
         }
 
-        // 5. Try iTunes Global Preview Stream Engine
+        // 4. Try Cobalt API
+        if (cleanId.length == 11) {
+            val cobaltResult = tryExtractCobaltApi(cleanId)
+            if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Success] Cobalt API extracted streamUrl for videoId '$cleanId'")
+                cacheResult(cleanId, cobaltResult)
+                return@withContext cobaltResult
+            }
+        }
+
+        // 5. Try Native On-Device YoutubeDL
+        if (cleanId.length == 11) {
+            val ytdlResult = tryExtractYtdl(cleanId)
+            if (ytdlResult != null && ytdlResult.streamUrl.isNotBlank()) {
+                Log.d(TAG, "[Success] YoutubeDL extracted streamUrl for videoId '$cleanId'")
+                cacheResult(cleanId, ytdlResult)
+                return@withContext ytdlResult
+            }
+        }
+
+        // 6. Try iTunes Global Preview Stream Engine Fallback
         val itunesResult = tryExtractItunesFallback(searchTerms)
         if (itunesResult != null && itunesResult.streamUrl.isNotBlank()) {
             Log.d(TAG, "[Success] iTunes audio stream extracted for '$searchTerms'")
@@ -239,7 +251,7 @@ class YoutubeStreamRepository(private val context: Context) {
             return@withContext itunesResult
         }
 
-        // 6. Try Audius Decentralized Audio Stream Engine
+        // 7. Try Audius Decentralized Audio Stream Engine Fallback
         val audiusResult = tryExtractAudiusFallback(searchTerms)
         if (audiusResult != null && audiusResult.streamUrl.isNotBlank()) {
             Log.d(TAG, "[Success] Audius stream extracted for '$searchTerms'")
@@ -247,115 +259,8 @@ class YoutubeStreamRepository(private val context: Context) {
             return@withContext audiusResult
         }
 
-        // 7. Try Cobalt API
-        if (cleanId.length == 11) {
-            val cobaltResult = tryExtractCobaltApi(cleanId)
-            if (cobaltResult != null && cobaltResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] Cobalt API extracted streamUrl")
-                cacheResult(cleanId, cobaltResult)
-                return@withContext cobaltResult
-            }
-        }
-
-        // 8. Try Native On-Device YoutubeDL
-        if (cleanId.length == 11) {
-            val ytdlResult = tryExtractYtdl(cleanId)
-            if (ytdlResult != null && ytdlResult.streamUrl.isNotBlank()) {
-                Log.d(TAG, "[Success] YoutubeDL extracted streamUrl")
-                cacheResult(cleanId, ytdlResult)
-                return@withContext ytdlResult
-            }
-        }
-
         Log.e(TAG, "[Failure] All stream extraction endpoints exhausted for target '$cleanId'")
         null
-    }
-
-    private fun tryExtractJioSaavnApi(query: String): StreamExtractionResult? {
-        if (query.isBlank()) return null
-        val cleanQuery = query
-            .replace("https://www.youtube.com/watch?v=", "")
-            .replace("https://youtu.be/", "")
-            .replace("Official Music Video", "", ignoreCase = true)
-            .replace("Official Video", "", ignoreCase = true)
-            .replace("Official Audio", "", ignoreCase = true)
-            .replace("HD", "", ignoreCase = true)
-            .replace("4K", "", ignoreCase = true)
-            .trim()
-
-        val saavnEndpoints = listOf(
-            "https://saavn-api.vercel.app/search/songs?query="
-        )
-
-        for (apiBase in saavnEndpoints) {
-            try {
-                val encoded = java.net.URLEncoder.encode(cleanQuery, "UTF-8")
-                val req = Request.Builder()
-                    .url(apiBase + encoded)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                    .build()
-
-                fastClient.newCall(req).execute().use { response ->
-                    if (!response.isSuccessful) return@use
-                    val body = response.body?.string() ?: return@use
-                    if (body.startsWith("[")) {
-                        val arr = org.json.JSONArray(body)
-                        if (arr.length() > 0) {
-                            val first = arr.getJSONObject(0)
-                            val streamUrl = first.optString("url")
-                            val title = first.optString("title").ifBlank { cleanQuery }
-                            val artists = first.optString("artists").ifBlank { "Online Stream" }
-                            val duration = first.optLong("duration", 180L)
-                            val image = first.optString("image")
-
-                            if (streamUrl.isNotBlank() && streamUrl.startsWith("http")) {
-                                return StreamExtractionResult(
-                                    title = title,
-                                    artist = artists,
-                                    durationMs = duration * 1000L,
-                                    artworkUrl = image.ifBlank { null },
-                                    streamUrl = streamUrl,
-                                    format = "audio/mp4"
-                                )
-                            }
-                        }
-                    } else if (body.startsWith("{")) {
-                        val obj = JSONObject(body)
-                        val data = obj.optJSONObject("data") ?: obj
-                        val results = data.optJSONArray("results")
-                        if (results != null && results.length() > 0) {
-                            val first = results.getJSONObject(0)
-                            val downloadUrls = first.optJSONArray("downloadUrl")
-                            var bestUrl: String? = null
-                            if (downloadUrls != null && downloadUrls.length() > 0) {
-                                val lastObj = downloadUrls.getJSONObject(downloadUrls.length() - 1)
-                                bestUrl = lastObj.optString("url")
-                            }
-                            if (bestUrl.isNullOrBlank()) {
-                                bestUrl = first.optString("url")
-                            }
-                            val title = first.optString("name", first.optString("title")).ifBlank { cleanQuery }
-                            val primaryArtists = first.optString("primaryArtists", first.optString("artists")).ifBlank { "Online Stream" }
-                            val duration = first.optLong("duration", 180L)
-
-                            if (!bestUrl.isNullOrBlank() && bestUrl.startsWith("http")) {
-                                return StreamExtractionResult(
-                                    title = title,
-                                    artist = primaryArtists,
-                                    durationMs = duration * 1000L,
-                                    artworkUrl = null,
-                                    streamUrl = bestUrl,
-                                    format = "audio/mp4"
-                                )
-                            }
-                        }
-                    }
-                }
-            } catch (e: Throwable) {
-                Log.w(TAG, "Saavn API $apiBase failed: ${e.message}")
-            }
-        }
-        return null
     }
 
     private fun tryExtractYoutubeiApi(videoId: String): StreamExtractionResult? {
