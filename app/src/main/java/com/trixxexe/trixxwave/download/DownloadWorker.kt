@@ -134,6 +134,29 @@ class DownloadWorker(
                 resolver.update(uri, contentValues, null, null)
             }
 
+            // Update local Room database so the downloaded song appears in Downloaded tab
+            try {
+                val db = com.trixxexe.trixxwave.data.db.TrixxWaveDatabase.getDatabase(context)
+                val existing = db.songDao().getSongByTitleAndArtist(title, artist)
+                if (existing != null) {
+                    db.songDao().insertSong(existing.copy(filePath = uri.toString()))
+                } else {
+                    db.songDao().insertSong(
+                        com.trixxexe.trixxwave.data.db.Song(
+                            title = title,
+                            artist = artist,
+                            album = album,
+                            albumArtUri = artworkUrl,
+                            filePath = uri.toString(),
+                            source = "Downloaded",
+                            dateAdded = System.currentTimeMillis()
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             tempFile.delete()
             setProgress(workDataOf("progress" to 100, "videoId" to videoId))
             Result.success(workDataOf("uri" to uri.toString()))

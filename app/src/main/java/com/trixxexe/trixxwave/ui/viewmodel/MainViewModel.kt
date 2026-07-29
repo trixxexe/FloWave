@@ -155,30 +155,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val videoIdOrUrl = song.originalUrl ?: song.filePath
             if (videoIdOrUrl != null) {
-                if (!videoIdOrUrl.startsWith("/") && !videoIdOrUrl.startsWith("file://")) {
-                    // Online track (YouTube Video ID or HTTP URL)
+                if (!videoIdOrUrl.startsWith("/") && !videoIdOrUrl.startsWith("file://") && !videoIdOrUrl.startsWith("content://")) {
+                    // Online track
                     try {
                         val videoId = videoIdOrUrl.substringAfter("v=").substringBefore("&")
-                        val streamUrl = innerTubeRepo.getStreamUrl(videoId).getOrNull()
-                        if (streamUrl != null) {
-                            playerManager.playTrack(
-                                url = streamUrl,
-                                videoId = videoId,
-                                title = song.title,
-                                artist = song.artist,
-                                artworkUrl = song.albumArtUri ?: ""
-                            )
-                            lyricsRepo.fetchLyrics(song.title, song.artist, song.durationMs, videoId)
-                        } else {
-                            // Fallback direct playback
-                            playerManager.playTrack(
-                                url = videoIdOrUrl,
-                                videoId = videoId,
-                                title = song.title,
-                                artist = song.artist,
-                                artworkUrl = song.albumArtUri ?: ""
-                            )
-                        }
+                        val streamUrl = innerTubeRepo.getStreamUrl(videoId, song.title, song.artist).getOrNull() ?: videoIdOrUrl
+                        playerManager.playTrack(
+                            url = streamUrl,
+                            videoId = videoId,
+                            title = song.title,
+                            artist = song.artist,
+                            artworkUrl = song.albumArtUri ?: ""
+                        )
+                        lyricsRepo.fetchLyrics(song.title, song.artist, song.durationMs, videoId)
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -272,20 +261,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val url = song.originalUrl ?: return@launch
                 val videoId = url.substringAfter("v=").substringBefore("&")
-                val streamUrl = innerTubeRepo.getStreamUrl(videoId).getOrNull()
-                if (streamUrl != null) {
-                    downloadManager.startDownload(
-                        videoId = videoId,
-                        url = streamUrl,
-                        title = song.title,
-                        artist = song.artist,
-                        album = song.album,
-                        artworkUrl = song.albumArtUri,
-                        isWebm = streamUrl.contains("webm")
-                    )
-                    // Also save song into local DB
-                    songDao.insertSong(song)
-                }
+                val streamUrl = innerTubeRepo.getStreamUrl(videoId, song.title, song.artist).getOrNull() ?: url
+                
+                val trackKey = if (videoId.length in 5..25) videoId else "dl_${song.title.hashCode()}_${song.artist.hashCode()}"
+                downloadManager.startDownload(
+                    videoId = trackKey,
+                    url = streamUrl,
+                    title = song.title,
+                    artist = song.artist,
+                    album = song.album,
+                    artworkUrl = song.albumArtUri,
+                    isWebm = streamUrl.contains("webm")
+                )
+                // Also save song into local DB
+                songDao.insertSong(song)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
