@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -45,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 import com.trixxexe.trixxwave.data.api.LyricsState
 import com.trixxexe.trixxwave.data.db.Song
@@ -169,7 +172,11 @@ fun MainScreen(viewModel: MainViewModel) {
                 )
             },
             bottomBar = {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
                     // Glassmorphic Mini Player
                     AnimatedVisibility(visible = currentSong != null) {
                         currentSong?.let { song ->
@@ -774,8 +781,9 @@ fun ExploreScreenContent(
             }
         } else {
             LazyColumn(
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 120.dp)
+                contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(displayedList) { song ->
                     LiquidGlassSongCard(
@@ -878,8 +886,9 @@ fun LibraryScreenContent(
             0 -> {
                 // Playlists View
                 LazyColumn(
+                    modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     item {
                         GlassListItem(
@@ -932,8 +941,9 @@ fun LibraryScreenContent(
                 // Liked Songs
                 val likedSongs = songs.filter { it.isLiked }
                 LazyColumn(
+                    modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     items(likedSongs) { song ->
                         LiquidGlassSongCard(
@@ -951,8 +961,9 @@ fun LibraryScreenContent(
                 // Downloaded
                 val downloadedSongs = songs.filter { it.filePath != null }
                 LazyColumn(
+                    modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     items(downloadedSongs) { song ->
                         LiquidGlassSongCard(
@@ -969,8 +980,9 @@ fun LibraryScreenContent(
             4 -> {
                 // Folder View
                 LazyColumn(
+                    modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     item {
                         GlassListItem(
@@ -1006,8 +1018,9 @@ fun LibraryScreenContent(
             else -> {
                 // All Songs
                 LazyColumn(
+                    modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     items(songs) { song ->
                         LiquidGlassSongCard(
@@ -1054,7 +1067,7 @@ fun SettingsScreenContent(
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(horizontal = 16.dp)
-            .padding(bottom = 120.dp),
+            .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -1694,7 +1707,7 @@ fun LyricsScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        contentPadding = PaddingValues(bottom = 120.dp)
+                        contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
                         items(lyricsState.lines.size) { index ->
                             val line = lyricsState.lines[index]
@@ -1921,7 +1934,6 @@ fun FloatingGlassNavBar(
 ) {
     Box(
         modifier = Modifier
-            .navigationBarsPadding()
             .fillMaxWidth()
             .padding(bottom = 12.dp, start = 20.dp, end = 20.dp),
         contentAlignment = Alignment.Center
@@ -2047,6 +2059,13 @@ fun NowPlayingGlassModal(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            }
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color(0xF207090E)
@@ -2054,9 +2073,10 @@ fun NowPlayingGlassModal(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .systemBarsPadding()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
@@ -2284,6 +2304,13 @@ fun OnboardingProfileModal(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            }
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color(0xFB07090E)
@@ -2573,6 +2600,13 @@ fun DownloadManagerGlassModal(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            }
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color(0xFA07090E)
@@ -2580,7 +2614,8 @@ fun DownloadManagerGlassModal(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .systemBarsPadding()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
                     .padding(20.dp)
             ) {
                 Row(
@@ -3078,11 +3113,24 @@ fun AudioOutputSwitcherModal(
         Triple("🚗 Android Auto Bluetooth", "Automotive Stereo Protocol", Icons.Default.DirectionsCar)
     )
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            }
+        }
+
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(vertical = 12.dp),
             shape = RoundedCornerShape(28.dp),
             color = Color(0xF212131C),
             border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f)),
@@ -3180,11 +3228,24 @@ fun AiVibeAssistantModal(
         "🏖️ Retro Vaporwave Sunset"
     )
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            }
+        }
+
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(vertical = 12.dp),
             shape = RoundedCornerShape(28.dp),
             color = Color(0xF212131C),
             border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f)),
