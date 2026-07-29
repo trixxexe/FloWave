@@ -78,17 +78,32 @@ class PlayerManager(private val context: Context) {
                 _isPlaying.value = isPlaying
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
-                _currentDuration.value = controller?.duration?.takeIf { it > 0 } ?: 0L
+                val dur = controller?.duration ?: 0L
+                if (dur > 0) _currentDuration.value = dur
+            }
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                val dur = controller?.duration ?: 0L
+                if (dur > 0) _currentDuration.value = dur
+            }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val dur = controller?.duration ?: 0L
+                if (dur > 0) _currentDuration.value = dur
             }
         })
     }
     
     fun updateProgress() {
-        _currentPosition.value = controller?.currentPosition ?: 0L
+        val c = controller ?: return
+        _currentPosition.value = c.currentPosition
+        val dur = c.duration
+        if (dur > 0 && _currentDuration.value != dur) {
+            _currentDuration.value = dur
+        }
     }
 
     fun playTrack(url: String, videoId: String, title: String, artist: String, artworkUrl: String) {
         val c = controller ?: return
+        _isPlaying.value = true
         
         val mediaItem = MediaItem.Builder()
             .setMediaId(videoId)
@@ -108,10 +123,12 @@ class PlayerManager(private val context: Context) {
     }
 
     fun pause() {
+        _isPlaying.value = false
         controller?.pause()
     }
 
     fun resume() {
+        _isPlaying.value = true
         controller?.play()
     }
 

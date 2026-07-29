@@ -384,80 +384,14 @@ fun TopGlassBar(
     onDownloadClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    val currentTimeStr = remember {
-        val sdf = SimpleDateFormat("EEE, MMM d • h:mm a", Locale.getDefault())
-        sdf.format(Date())
-    }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp)
+            .padding(top = 10.dp, bottom = 8.dp)
     ) {
-        // Top Glass Time & Device Capsule
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0x1AFFFFFF),
-                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-                modifier = Modifier.clip(RoundedCornerShape(20.dp))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.AccessTime,
-                        contentDescription = "Time",
-                        tint = accentColor,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = currentTimeStr,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                        color = Color.White.copy(alpha = 0.9f)
-                    )
-                }
-            }
-
-            // Output Switcher Quick Badge
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(onClick = onOutputClick),
-                shape = RoundedCornerShape(20.dp),
-                color = accentColor.copy(alpha = 0.2f),
-                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.5f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.CastConnected,
-                        contentDescription = "Audio Output",
-                        tint = accentColor,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = currentOutputDevice.take(16) + if (currentOutputDevice.length > 16) "…" else "",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = accentColor
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Profile & Header Controls
+        // Profile & Header Controls - Clean Minimalist Layout
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -466,24 +400,24 @@ fun TopGlassBar(
             // User Avatar & Name
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .clickable(onClick = onProfileClick)
-                    .padding(4.dp),
+                    .padding(vertical = 4.dp, horizontal = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AvatarDisplay(
                     avatarKey = userAvatar,
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .border(1.5.dp, accentColor, CircleShape)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "Good to see you,",
+                        text = "Welcome back,",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.6f)
+                        color = Color(0xFFA0A0A0)
                     )
                     Text(
                         text = userName,
@@ -495,48 +429,76 @@ fun TopGlassBar(
                 }
             }
 
-            // Top Glassmorphic Action Buttons
+            // Minimalist Action Buttons
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // AI Vibe Assistant Button
+                // Output Switcher Badge
                 Surface(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onAiVibeClick),
-                    shape = CircleShape,
-                    color = accentColor.copy(alpha = 0.25f),
-                    border = BorderStroke(1.dp, accentColor)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onOutputClick),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF141414),
+                    border = BorderStroke(1.dp, Color(0xFF262626))
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = "AI Vibe Assistant",
+                            Icons.Default.CastConnected,
+                            contentDescription = "Output Device",
                             tint = accentColor,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = currentOutputDevice.take(12) + if (currentOutputDevice.length > 12) "…" else "",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = accentColor
                         )
                     }
                 }
 
-                // Glassmorphic Download Manager Button
+                // AI Vibe Assistant Button
+                Surface(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onAiVibeClick),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF141414),
+                    border = BorderStroke(1.dp, Color(0xFF262626))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "AI Vibe",
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Download Manager Button
                 Box {
                     Surface(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable(onClick = onDownloadClick),
-                        shape = CircleShape,
-                        color = Color(0x22FFFFFF),
-                        border = BorderStroke(1.dp, Color(0x33FFFFFF))
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF141414),
+                        border = BorderStroke(1.dp, Color(0xFF262626))
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 Icons.Default.Download,
                                 contentDescription = "Downloads",
-                                tint = accentColor,
-                                modifier = Modifier.size(20.dp)
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -545,13 +507,13 @@ fun TopGlassBar(
                             shape = CircleShape,
                             color = accentColor,
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(16.dp)
                                 .align(Alignment.TopEnd)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
                                     text = activeDownloadsCount.toString(),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                     color = Color.Black,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -563,19 +525,19 @@ fun TopGlassBar(
                 // Settings Gear Button
                 Surface(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .clickable(onClick = onSettingsClick),
-                    shape = CircleShape,
-                    color = Color(0x22FFFFFF),
-                    border = BorderStroke(1.dp, Color(0x33FFFFFF))
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF141414),
+                    border = BorderStroke(1.dp, Color(0xFF262626))
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.Settings,
                             contentDescription = "Settings",
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -611,190 +573,208 @@ fun ExploreScreenContent(
         }
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp)
     ) {
         // Mode Selector Pills
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable { isOfflineMode = true },
-                shape = RoundedCornerShape(20.dp),
-                color = if (isOfflineMode) accentColor.copy(alpha = 0.25f) else Color(0x15FFFFFF),
-                border = BorderStroke(1.dp, if (isOfflineMode) accentColor else Color(0x22FFFFFF))
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { isOfflineMode = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isOfflineMode) accentColor.copy(alpha = 0.2f) else Color(0xFF121212),
+                    border = BorderStroke(1.dp, if (isOfflineMode) accentColor else Color(0xFF222222))
                 ) {
-                    Icon(
-                        Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = if (isOfflineMode) accentColor else Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Offline Mode",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (isOfflineMode) accentColor else Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
-
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable { isOfflineMode = false },
-                shape = RoundedCornerShape(20.dp),
-                color = if (!isOfflineMode) accentColor.copy(alpha = 0.25f) else Color(0x15FFFFFF),
-                border = BorderStroke(1.dp, if (!isOfflineMode) accentColor else Color(0x22FFFFFF))
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Cloud,
-                        contentDescription = null,
-                        tint = if (!isOfflineMode) accentColor else Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Online Mode",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (!isOfflineMode) accentColor else Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // FloWave Liquid Glass Engine Hero Card
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0x1E12131C),
-            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f))
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "LIQUID GLASS AUDIO",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        letterSpacing = 1.5.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = accentColor
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "FloWave Engine",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
-                Text(
-                    text = "Real-time specular refraction & 10-band EQ",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Glassmorphic Search Bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search YouTube Music or Local...", color = Color.White.copy(alpha = 0.5f)) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = accentColor) },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { onSearchQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color.White)
+                    Row(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = if (isOfflineMode) accentColor else Color(0xFFA0A0A0),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Offline Mode",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (isOfflineMode) accentColor else Color(0xFFA0A0A0)
+                        )
                     }
                 }
-            },
-            shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color(0x2212131C),
-                unfocusedContainerColor = Color(0x1812131C),
-                focusedBorderColor = accentColor,
-                unfocusedBorderColor = Color(0x33FFFFFF),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            ),
-            singleLine = true
-        )
 
-        Spacer(modifier = Modifier.height(16.dp))
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { isOfflineMode = false },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (!isOfflineMode) accentColor.copy(alpha = 0.2f) else Color(0xFF121212),
+                    border = BorderStroke(1.dp, if (!isOfflineMode) accentColor else Color(0xFF222222))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Cloud,
+                            contentDescription = null,
+                            tint = if (!isOfflineMode) accentColor else Color(0xFFA0A0A0),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Online Mode",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (!isOfflineMode) accentColor else Color(0xFFA0A0A0)
+                        )
+                    }
+                }
+            }
+        }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (searchQuery.isNotBlank()) "Search Results" else "Your Tracks (${displayedList.size})",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
+        // ViTune & Seal Engine Hero Banner
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF121212),
+                border = BorderStroke(1.dp, Color(0xFF222222))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(accentColor)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "VITUNE & SEAL ENGINE",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    letterSpacing = 1.2.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = accentColor
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "High-Res Audio Direct Stream",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                        Text(
+                            text = "256k AAC Direct Stream & Fast Local Caching",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFA0A0A0)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Minimalist Search Bar
+        item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search YouTube Music or Local...", color = Color(0xFF666666)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = accentColor) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color.White)
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF121212),
+                    unfocusedContainerColor = Color(0xFF121212),
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = Color(0xFF222222),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        if (isSearching) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = accentColor)
-            }
-        } else if (displayedList.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
+        // Header
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "No audio tracks found. Search online to discover music!",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center
+                    text = if (searchQuery.isNotBlank()) "Search Results" else "Your Tracks (${displayedList.size})",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
                 )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(displayedList) { song ->
-                    LiquidGlassSongCard(
-                        song = song,
-                        downloadStatus = downloadStates[song.originalUrl ?: song.filePath ?: ""],
-                        accentColor = accentColor,
-                        onClick = { onSongSelect(song) },
-                        onDownload = { onDownload(song) },
-                        onLikeToggle = { onLikeToggle(song) }
+        }
+
+        if (isSearching) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = accentColor)
+                }
+            }
+        } else if (displayedList.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No audio tracks found. Search online to discover music!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center
                     )
                 }
+            }
+        } else {
+            items(displayedList) { song ->
+                LiquidGlassSongCard(
+                    song = song,
+                    downloadStatus = downloadStates[song.originalUrl ?: song.filePath ?: ""],
+                    accentColor = accentColor,
+                    onClick = { onSongSelect(song) },
+                    onDownload = { onDownload(song) },
+                    onLikeToggle = { onLikeToggle(song) }
+                )
             }
         }
     }
@@ -1098,20 +1078,22 @@ fun SettingsScreenContent(
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Sleek Interface", "AMOLED Dark", "AMOLED Light").forEach { preset ->
+                    listOf("AMOLED Minimal", "Flame Amber", "Royal Blue", "Emerald Dark").forEach { preset ->
                         FilterChip(
                             selected = themeConfig.preset == preset,
                             onClick = { viewModel.updateThemePreset(preset) },
                             label = { Text(preset) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = accentColor,
-                                selectedLabelColor = Color.Black
+                                selectedLabelColor = Color.Black,
+                                containerColor = Color(0xFF1A1A1A),
+                                labelColor = Color.White
                             )
                         )
                     }
                 }
 
-                Divider(color = Color(0x22FFFFFF))
+                HorizontalDivider(color = Color(0xFF222222))
 
                 Text(
                     text = "Accent Color",
@@ -1119,20 +1101,20 @@ fun SettingsScreenContent(
                     color = Color.White
                 )
                 Text(
-                    text = "Selected color applies to buttons, active tabs, and sliders",
+                    text = "Selected accent applies across buttons, active tabs, and sliders",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = Color(0xFFA0A0A0)
                 )
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf("#00F5D4", "#F27D26", "#9333EA", "#10B981", "#F59E0B").forEach { hex ->
+                    listOf("#00F5D4", "#F27D26", "#3B82F6", "#10B981", "#EF4444", "#FAFAFA").forEach { hex ->
                         val color = Color(android.graphics.Color.parseColor(hex))
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(color)
                                 .border(
@@ -1145,7 +1127,7 @@ fun SettingsScreenContent(
                     }
                 }
 
-                Divider(color = Color(0x22FFFFFF))
+                HorizontalDivider(color = Color(0xFF222222))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1154,14 +1136,14 @@ fun SettingsScreenContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Pure AMOLED BLACK",
+                            text = "Pure AMOLED Black",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color.White
                         )
                         Text(
-                            text = "Use true #000000 black background for OLED energy saving",
+                            text = "True #000000 black canvas for maximum OLED contrast and battery savings",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = Color(0xFFA0A0A0)
                         )
                     }
                     Switch(
@@ -1171,73 +1153,71 @@ fun SettingsScreenContent(
                     )
                 }
 
-                Divider(color = Color(0x22FFFFFF))
+                HorizontalDivider(color = Color(0xFF222222))
 
                 Text(
-                    text = "Custom Wallpaper Background",
+                    text = "Corner Radius Style",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
                 )
                 Text(
-                    text = "Set any image from your gallery as the app liquid glass background",
+                    text = "Choose corner roundness for cards, inputs, and buttons",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = Color(0xFFA0A0A0)
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = { wallpaperPickerLauncher.launch("image/*") },
-                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Default.Image, contentDescription = null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Choose Photo", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                    if (!themeConfig.customBgUri.isNullOrEmpty()) {
-                        OutlinedButton(
-                            onClick = { viewModel.setCustomBgUri(null) },
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Text("Remove", color = Color.White)
-                        }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Sharp (8dp)", "Balanced (12dp)", "Smooth (16dp)").forEach { style ->
+                        FilterChip(
+                            selected = themeConfig.cornerStyle == style,
+                            onClick = { viewModel.setCornerStyle(style) },
+                            label = { Text(style) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accentColor,
+                                selectedLabelColor = Color.Black,
+                                containerColor = Color(0xFF1A1A1A),
+                                labelColor = Color.White
+                            )
+                        )
                     }
                 }
-
-                Divider(color = Color(0x22FFFFFF))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Glass Blur Intensity",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
-                    Text(
-                        text = "${themeConfig.blurIntensity.toInt()} dp",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = accentColor
-                    )
-                }
-                Slider(
-                    value = themeConfig.blurIntensity,
-                    onValueChange = { viewModel.setBlurIntensity(it) },
-                    valueRange = 0f..40f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = accentColor,
-                        activeTrackColor = accentColor
-                    )
-                )
             }
         }
 
-        // SECTION: PLAYBACK
-        SectionHeader(title = "PLAYBACK", icon = Icons.Default.GraphicEq, accentColor = accentColor)
+        // SECTION: PLAYBACK & STREAMING ENGINE
+        SectionHeader(title = "VITUNE & SEAL ENGINE", icon = Icons.Default.GraphicEq, accentColor = accentColor)
 
         GlassSettingsCard {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    text = "Streaming Quality",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+                Text(
+                    text = "Select default direct audio stream bitrates from YouTube Music",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFA0A0A0)
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("High (256k AAC)", "Ultra (320k)", "Standard (160k)", "Saver (96k)").forEach { qual ->
+                        FilterChip(
+                            selected = themeConfig.streamingQuality == qual,
+                            onClick = { viewModel.setStreamingQuality(qual) },
+                            label = { Text(qual) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accentColor,
+                                selectedLabelColor = Color.Black,
+                                containerColor = Color(0xFF1A1A1A),
+                                labelColor = Color.White
+                            )
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFF222222))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1250,9 +1230,9 @@ fun SettingsScreenContent(
                             color = Color.White
                         )
                         Text(
-                            text = "Plays every track from literal 0ms without trimming or pre-cutting audio",
+                            text = "Plays tracks instantly from 0ms without trimming or delays",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = Color(0xFFA0A0A0)
                         )
                     }
                     Checkbox(
@@ -1757,15 +1737,15 @@ fun LiquidGlassSongCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0x1E12131C),
-        border = BorderStroke(1.dp, Color(0x22FFFFFF))
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF121212),
+        border = BorderStroke(1.dp, Color(0xFF222222))
     ) {
         Row(
             modifier = Modifier
-                .padding(12.dp)
+                .padding(10.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1773,36 +1753,53 @@ fun LiquidGlassSongCard(
                 model = song.albumArtUri,
                 contentDescription = song.title,
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0x33FFFFFF)),
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF222222)),
                 contentScale = ContentScale.Crop
             )
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = song.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = song.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFA0A0A0),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    // Audio Badge
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF1E1E1E)
+                    ) {
+                        Text(
+                            text = if (song.filePath != null) "OFFLINE" else "256k AAC",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                            color = if (song.filePath != null) accentColor else Color(0xFF888888),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             }
 
             IconButton(onClick = onLikeToggle) {
                 Icon(
                     imageVector = if (song.isLiked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = "Favorite",
-                    tint = if (song.isLiked) Color.Red else Color.White.copy(alpha = 0.7f)
+                    tint = if (song.isLiked) Color.Red else Color(0xFFA0A0A0)
                 )
             }
 
@@ -1811,7 +1808,7 @@ fun LiquidGlassSongCard(
                     is DownloadStatus.Downloading -> {
                         CircularProgressIndicator(
                             progress = { downloadStatus.progress / 100f },
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(20.dp),
                             color = accentColor,
                             strokeWidth = 2.dp
                         )
@@ -1827,7 +1824,7 @@ fun LiquidGlassSongCard(
                         Icon(
                             Icons.Default.Download,
                             contentDescription = "Download",
-                            tint = Color.White.copy(alpha = 0.7f)
+                            tint = Color(0xFFA0A0A0)
                         )
                     }
                 }
@@ -1849,14 +1846,14 @@ fun LiquidGlassMiniPlayerBar(
 ) {
     Surface(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onOpenPlayer),
-        shape = RoundedCornerShape(24.dp),
-        color = Color(0xCC12131C),
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.5f)),
-        shadowElevation = 12.dp
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF161616),
+        border = BorderStroke(1.dp, Color(0xFF282828)),
+        shadowElevation = 8.dp
     ) {
         Column {
             LinearProgressIndicator(
@@ -1935,20 +1932,21 @@ fun FloatingGlassNavBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp, start = 20.dp, end = 20.dp),
+            .navigationBarsPadding()
+            .padding(bottom = 8.dp, start = 16.dp, end = 16.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(32.dp),
-            color = Color(0xEE12131C),
-            border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-            shadowElevation = 16.dp
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF121212),
+            border = BorderStroke(1.dp, Color(0xFF222222)),
+            shadowElevation = 8.dp
         ) {
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 NavPillButton(
                     icon = Icons.Default.Home,
@@ -1967,31 +1965,20 @@ fun FloatingGlassNavBar(
                 )
 
                 NavPillButton(
+                    icon = Icons.Default.Lyrics,
+                    label = "Lyrics",
+                    isSelected = selectedTab == 3,
+                    accentColor = accentColor,
+                    onClick = { onTabSelected(3) }
+                )
+
+                NavPillButton(
                     icon = Icons.Default.Settings,
                     label = "Settings",
                     isSelected = selectedTab == 2,
                     accentColor = accentColor,
                     onClick = { onTabSelected(2) }
                 )
-
-                Surface(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onSearchClick),
-                    shape = CircleShape,
-                    color = Color(0x22FFFFFF),
-                    border = BorderStroke(1.dp, Color(0x33FFFFFF))
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
             }
         }
     }
@@ -2007,27 +1994,27 @@ fun NavPillButton(
 ) {
     Surface(
         modifier = Modifier
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp),
-        color = if (isSelected) accentColor.copy(alpha = 0.25f) else Color.Transparent,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) accentColor.copy(alpha = 0.2f) else Color.Transparent,
         border = BorderStroke(1.dp, if (isSelected) accentColor else Color.Transparent)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isSelected) accentColor else Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
+                tint = if (isSelected) accentColor else Color(0xFFA0A0A0),
+                modifier = Modifier.size(18.dp)
             )
             if (isSelected) {
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
                     color = accentColor
                 )
             }
@@ -2066,6 +2053,14 @@ fun NowPlayingGlassModal(
             }
         }
 
+        var isDragging by remember { mutableStateOf(false) }
+        var dragPosition by remember { mutableFloatStateOf(0f) }
+
+        val maxDurationFloat = if (currentDuration > 0) currentDuration.toFloat() else 100f
+        val currentPositionFloat = if (currentDuration > 0) currentPosition.toFloat().coerceIn(0f, maxDurationFloat) else 0f
+        val sliderValue = if (isDragging) dragPosition.coerceIn(0f, maxDurationFloat) else currentPositionFloat
+        val displayPosition = if (isDragging) dragPosition.toLong() else currentPosition
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color(0xF207090E)
@@ -2076,7 +2071,8 @@ fun NowPlayingGlassModal(
                     .statusBarsPadding()
                     .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 16.dp, bottom = 36.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
@@ -2162,9 +2158,16 @@ fun NowPlayingGlassModal(
                 // Progress & Seek Slider
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Slider(
-                        value = if (currentDuration > 0) currentPosition.toFloat() else 0f,
-                        valueRange = 0f..(if (currentDuration > 0) currentDuration.toFloat() else 100f),
-                        onValueChange = { onSeek(it.toLong()) },
+                        value = sliderValue,
+                        valueRange = 0f..maxDurationFloat,
+                        onValueChange = { newPos ->
+                            isDragging = true
+                            dragPosition = newPos
+                        },
+                        onValueChangeFinished = {
+                            onSeek(dragPosition.toLong())
+                            isDragging = false
+                        },
                         colors = SliderDefaults.colors(
                             thumbColor = accentColor,
                             activeTrackColor = accentColor,
@@ -2175,7 +2178,7 @@ fun NowPlayingGlassModal(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(formatMs(currentPosition), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                        Text(formatMs(displayPosition), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
                         Text(formatMs(currentDuration), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
                     }
                 }
@@ -2313,21 +2316,23 @@ fun OnboardingProfileModal(
 
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color(0xFB07090E)
+            color = Color(0xFF000000)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 16.dp, bottom = 16.dp)
+                    .imePadding(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Step Indicator Dots
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 16.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2335,9 +2340,9 @@ fun OnboardingProfileModal(
                         Box(
                             modifier = Modifier
                                 .height(6.dp)
-                                .width(if (currentStep == step) 28.dp else 10.dp)
+                                .width(if (currentStep == step) 32.dp else 10.dp)
                                 .clip(CircleShape)
-                                .background(if (currentStep == step) accentColor else Color(0x33FFFFFF))
+                                .background(if (currentStep == step) accentColor else Color(0xFF262626))
                         )
                         if (step < 3) Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -2360,26 +2365,26 @@ fun OnboardingProfileModal(
                         when (currentStep) {
                             1 -> {
                                 Surface(
-                                    modifier = Modifier.size(90.dp),
+                                    modifier = Modifier.size(76.dp),
                                     shape = CircleShape,
-                                    color = Color(0x1AFFFFFF),
+                                    color = Color(0xFF121212),
                                     border = BorderStroke(2.dp, accentColor)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.GraphicEq, contentDescription = null, tint = accentColor, modifier = Modifier.size(48.dp))
+                                        Icon(Icons.Default.GraphicEq, contentDescription = null, tint = accentColor, modifier = Modifier.size(38.dp))
                                     }
                                 }
 
                                 Text(
-                                    text = "Welcome to FloWave",
+                                    text = "Welcome to TrixxWave",
                                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                                     color = Color.White
                                 )
 
                                 Text(
-                                    text = "Next-generation liquid glass audio player with AI acoustic mood tagging, synchronized lyrics, and dynamic visualizer refraction.",
+                                    text = "High-fidelity minimalist AMOLED music player powered by ViTune & Seal streaming engine, fast local audio caching, synchronized lyrics, and equalizer.",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = Color(0xFFA0A0A0),
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -2390,23 +2395,23 @@ fun OnboardingProfileModal(
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "Personalize your identity and profile picture",
+                                    text = "Personalize your identity and avatar",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.6f)
+                                    color = Color(0xFFA0A0A0)
                                 )
 
                                 AvatarDisplay(
                                     avatarKey = selectedAvatar,
                                     modifier = Modifier
-                                        .size(100.dp)
+                                        .size(86.dp)
                                         .clip(CircleShape)
                                         .border(2.dp, accentColor, CircleShape)
                                 )
 
                                 Text(
-                                    text = "Or pick an animated avatar preset:",
+                                    text = "Choose an avatar preset:",
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White.copy(alpha = 0.7f)
+                                    color = Color(0xFFA0A0A0)
                                 )
 
                                 Row(
@@ -2421,7 +2426,7 @@ fun OnboardingProfileModal(
                                             AvatarDisplay(
                                                 avatarKey = avatar,
                                                 modifier = Modifier
-                                                    .size(50.dp)
+                                                    .size(48.dp)
                                                     .clip(CircleShape)
                                                     .border(
                                                         if (selectedAvatar == avatar) 2.dp else 0.dp,
@@ -2442,10 +2447,12 @@ fun OnboardingProfileModal(
                                     onValueChange = { nameInput = it },
                                     label = { Text("Your Name or Alias") },
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(20.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = Color(0xFF121212),
+                                        unfocusedContainerColor = Color(0xFF121212),
                                         focusedBorderColor = accentColor,
-                                        unfocusedBorderColor = Color(0x33FFFFFF),
+                                        unfocusedBorderColor = Color(0xFF262626),
                                         focusedTextColor = Color.White,
                                         unfocusedTextColor = Color.White
                                     )
@@ -2453,23 +2460,23 @@ fun OnboardingProfileModal(
                             }
                             3 -> {
                                 Text(
-                                    text = "Select Your Vibe",
+                                    text = "Select Accent Vibe",
                                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "Choose your glass material and theme palette",
+                                    text = "Choose your AMOLED dark theme accent color",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.6f)
+                                    color = Color(0xFFA0A0A0)
                                 )
 
                                 val vibes = listOf(
-                                    VibePreset("Sleek Interface", "Warm Amber Orange", "#F27D26"),
-                                    VibePreset("Liquid Obsidian", "Neon Cyan & Obsidian", "#00F5D4"),
-                                    VibePreset("Cyber Pink", "Neon Pink & Electric", "#FF007A"),
-                                    VibePreset("Emerald Wave", "Deep Forest Mint", "#10B981"),
-                                    VibePreset("Sunset Gold", "Amber Gold Glow", "#F59E0B"),
-                                    VibePreset("Aether White", "Clean Glass", "#6366F1")
+                                    VibePreset("AMOLED Cyan", "Pure Black & Electric Teal", "#00F5D4"),
+                                    VibePreset("Flame Amber", "Aesthetic Warm Amber", "#F27D26"),
+                                    VibePreset("Royal Blue", "Electric Sapphire", "#3B82F6"),
+                                    VibePreset("Emerald Mint", "Pure Deep Mint Green", "#10B981"),
+                                    VibePreset("Crimson Red", "Dark Velvet Crimson", "#EF4444"),
+                                    VibePreset("Monochrome White", "Minimalist Crisp White", "#FAFAFA")
                                 )
 
                                 vibes.forEach { vibe ->
@@ -2489,13 +2496,13 @@ fun OnboardingProfileModal(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Bottom Action Button Row - FIXED at the bottom, above system navigation bar!
+                // Bottom Action Button Row - FIXED at bottom, well above system navigation bar!
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp),
+                        .padding(top = 8.dp, bottom = 8.dp),
                     horizontalArrangement = if (currentStep == 1) Arrangement.Center else Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2504,9 +2511,9 @@ fun OnboardingProfileModal(
                             onClick = { currentStep-- },
                             modifier = Modifier.height(48.dp)
                         ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White.copy(alpha = 0.7f))
+                            Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Back", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
+                            Text("Back", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
@@ -2519,10 +2526,10 @@ fun OnboardingProfileModal(
                             }
                         },
                         modifier = Modifier
-                            .then(if (currentStep == 1) Modifier.fillMaxWidth() else Modifier)
-                            .height(52.dp),
+                            .fillMaxWidth(if (currentStep == 1) 1f else 0.65f)
+                            .height(50.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
                             text = if (currentStep == 3) "Finish Setup" else "Continue",
@@ -2530,7 +2537,7 @@ fun OnboardingProfileModal(
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Icon(
                             imageVector = if (currentStep == 3) Icons.Default.Check else Icons.Default.ArrowForward,
                             contentDescription = null,
@@ -2815,11 +2822,11 @@ fun SectionHeader(title: String, icon: ImageVector, accentColor: Color) {
 fun GlassSettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = Color(0x1E12131C),
-        border = BorderStroke(1.dp, Color(0x22FFFFFF))
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF121212),
+        border = BorderStroke(1.dp, Color(0xFF222222))
     ) {
-        Box(modifier = Modifier.padding(18.dp)) {
+        Box(modifier = Modifier.padding(16.dp)) {
             content()
         }
     }

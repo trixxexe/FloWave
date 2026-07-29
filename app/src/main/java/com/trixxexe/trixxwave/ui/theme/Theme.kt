@@ -18,13 +18,13 @@ private val DarkColorScheme = darkColorScheme(
     primary = NeonCyan,
     secondary = SleekPurple,
     tertiary = AmberSunset,
-    background = SurfaceDarkCharcoal,
-    surface = SurfaceDarkCard,
+    background = Color(0xFF000000),
+    surface = Color(0xFF121212),
     onPrimary = Color.Black,
     onSecondary = Color.White,
-    onBackground = TextPrimaryDark,
-    onSurface = TextPrimaryDark,
-    onSurfaceVariant = TextSecondaryDark
+    onBackground = Color(0xFFFAFAFA),
+    onSurface = Color(0xFFFAFAFA),
+    onSurfaceVariant = Color(0xFFA0A0A0)
 )
 
 @Composable
@@ -35,18 +35,20 @@ fun TrixxWaveTheme(
     val accentColor = try {
         Color(android.graphics.Color.parseColor(themeConfig.accentColorHex))
     } catch (e: Exception) {
-        NeonCyan
+        Color(0xFF00F5D4)
     }
 
-    val isAmoled = themeConfig.mode == "AMOLED" || themeConfig.mode == "OLED Black"
-    val bgColor = if (isAmoled) SurfaceAmoledBlack else SurfaceDarkCharcoal
-    val surfaceColor = if (isAmoled) Color(0xFF0D0D0D) else SurfaceDarkCard
+    val isLight = themeConfig.mode == "Light"
+    val bgColor = if (isLight) Color(0xFFF8FAFC) else if (themeConfig.mode == "Dark Charcoal") Color(0xFF0F0F12) else Color(0xFF000000)
+    val surfaceColor = if (isLight) Color(0xFFFFFFFF) else Color(0xFF121212)
 
     val colorScheme = DarkColorScheme.copy(
         primary = accentColor,
         secondary = accentColor.copy(alpha = 0.8f),
         background = bgColor,
-        surface = surfaceColor
+        surface = surfaceColor,
+        onBackground = if (isLight) Color(0xFF0F172A) else Color(0xFFFAFAFA),
+        onSurface = if (isLight) Color(0xFF0F172A) else Color(0xFFFAFAFA)
     )
 
     val view = LocalView.current

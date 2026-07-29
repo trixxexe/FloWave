@@ -10,18 +10,18 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "trixxwave_preferences")
 
 data class ThemeConfig(
-    val preset: String = "Sleek Interface",
-    val mode: String = "Dark",
-    val blurIntensity: Float = 20f,
-    val glassOpacity: Float = 0.08f,
-    val cornerRadiusDp: Int = 24,
-    val animatedOrbsEnabled: Boolean = true,
-    val accentColorHex: String = "#F27D26",
-    val primaryColorHex: String = "#050505",
+    val preset: String = "AMOLED Minimal",
+    val mode: String = "AMOLED",
+    val blurIntensity: Float = 0f,
+    val glassOpacity: Float = 0.0f,
+    val cornerRadiusDp: Int = 12,
+    val animatedOrbsEnabled: Boolean = false,
+    val accentColorHex: String = "#00F5D4",
+    val primaryColorHex: String = "#000000",
     val customBgUri: String? = null,
-    val contrastSafeMode: Boolean = false,
+    val contrastSafeMode: Boolean = true,
     val miniPlayerPosition: String = "Bottom",
-    val miniPlayerShape: String = "Pill",
+    val miniPlayerShape: String = "Clean Rectangle",
     val visualizerStyle: String = "Spectrum",
     val crossfadeDurationSec: Int = 3,
     val hapticIntensity: Float = 0.8f,
@@ -31,7 +31,7 @@ data class ThemeConfig(
     val widgetShowAlbumArt: Boolean = true,
     val widgetShowWaveform: Boolean = true,
     val widgetShowFavorite: Boolean = true,
-    val dynamicIslandEnabled: Boolean = true,
+    val dynamicIslandEnabled: Boolean = false,
     val gaplessEnabled: Boolean = true,
     val gaplessSilenceThresholdDb: Float = -45f,
     val autoScanGaplessOnImport: Boolean = true,
@@ -43,7 +43,11 @@ data class ThemeConfig(
     val aiProvider: String = "Groq",
     val aiApiKey: String = "",
     val aiModel: String = "llama-3.3-70b-versatile",
-    val pureAmoledBlack: Boolean = false
+    val pureAmoledBlack: Boolean = true,
+    val streamingQuality: String = "High (256k AAC)",
+    val downloadLocation: String = "Internal Audio",
+    val autoLyrics: Boolean = true,
+    val cornerStyle: String = "Balanced (12dp)"
 )
 
 class ThemePreferencesRepository(private val context: Context) {
@@ -86,6 +90,8 @@ class ThemePreferencesRepository(private val context: Context) {
         val AI_API_KEY = stringPreferencesKey("ai_api_key")
         val AI_MODEL = stringPreferencesKey("ai_model")
         val PURE_AMOLED_BLACK = booleanPreferencesKey("pure_amoled_black")
+        val CORNER_STYLE = stringPreferencesKey("corner_style")
+        val STREAMING_QUALITY = stringPreferencesKey("streaming_quality")
     }
 
     val isFirstRunFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -100,18 +106,18 @@ class ThemePreferencesRepository(private val context: Context) {
 
     val themeConfigFlow: Flow<ThemeConfig> = context.dataStore.data.map { prefs ->
         ThemeConfig(
-            preset = prefs[PreferenceKeys.PRESET] ?: "Sleek Interface",
-            mode = prefs[PreferenceKeys.MODE] ?: "Dark",
-            blurIntensity = prefs[PreferenceKeys.BLUR_INTENSITY] ?: 20f,
-            glassOpacity = prefs[PreferenceKeys.GLASS_OPACITY] ?: 0.08f,
-            cornerRadiusDp = prefs[PreferenceKeys.CORNER_RADIUS] ?: 24,
-            animatedOrbsEnabled = prefs[PreferenceKeys.ANIMATED_ORBS] ?: true,
-            accentColorHex = prefs[PreferenceKeys.ACCENT_COLOR] ?: "#F27D26",
-            primaryColorHex = prefs[PreferenceKeys.PRIMARY_COLOR] ?: "#050505",
+            preset = prefs[PreferenceKeys.PRESET] ?: "AMOLED Minimal",
+            mode = prefs[PreferenceKeys.MODE] ?: "AMOLED",
+            blurIntensity = prefs[PreferenceKeys.BLUR_INTENSITY] ?: 0f,
+            glassOpacity = prefs[PreferenceKeys.GLASS_OPACITY] ?: 0.0f,
+            cornerRadiusDp = prefs[PreferenceKeys.CORNER_RADIUS] ?: 12,
+            animatedOrbsEnabled = prefs[PreferenceKeys.ANIMATED_ORBS] ?: false,
+            accentColorHex = prefs[PreferenceKeys.ACCENT_COLOR] ?: "#00F5D4",
+            primaryColorHex = prefs[PreferenceKeys.PRIMARY_COLOR] ?: "#000000",
             customBgUri = prefs[PreferenceKeys.CUSTOM_BG_URI],
-            contrastSafeMode = prefs[PreferenceKeys.CONTRAST_SAFE] ?: false,
+            contrastSafeMode = prefs[PreferenceKeys.CONTRAST_SAFE] ?: true,
             miniPlayerPosition = prefs[PreferenceKeys.MINI_PLAYER_POSITION] ?: "Bottom",
-            miniPlayerShape = prefs[PreferenceKeys.MINI_PLAYER_SHAPE] ?: "Pill",
+            miniPlayerShape = prefs[PreferenceKeys.MINI_PLAYER_SHAPE] ?: "Clean Rectangle",
             visualizerStyle = prefs[PreferenceKeys.VISUALIZER_STYLE] ?: "Spectrum",
             crossfadeDurationSec = prefs[PreferenceKeys.CROSSFADE_DURATION] ?: 3,
             hapticIntensity = prefs[PreferenceKeys.HAPTIC_INTENSITY] ?: 0.8f,
@@ -121,7 +127,7 @@ class ThemePreferencesRepository(private val context: Context) {
             widgetShowAlbumArt = prefs[PreferenceKeys.WIDGET_SHOW_ALBUM_ART] ?: true,
             widgetShowWaveform = prefs[PreferenceKeys.WIDGET_SHOW_WAVEFORM] ?: true,
             widgetShowFavorite = prefs[PreferenceKeys.WIDGET_SHOW_FAVORITE] ?: true,
-            dynamicIslandEnabled = prefs[PreferenceKeys.DYNAMIC_ISLAND_ENABLED] ?: true,
+            dynamicIslandEnabled = prefs[PreferenceKeys.DYNAMIC_ISLAND_ENABLED] ?: false,
             gaplessEnabled = prefs[PreferenceKeys.GAPLESS_ENABLED] ?: true,
             gaplessSilenceThresholdDb = prefs[PreferenceKeys.GAPLESS_SILENCE_THRESHOLD_DB] ?: -45f,
             autoScanGaplessOnImport = prefs[PreferenceKeys.AUTO_SCAN_GAPLESS_ON_IMPORT] ?: true,
@@ -133,7 +139,9 @@ class ThemePreferencesRepository(private val context: Context) {
             aiProvider = prefs[PreferenceKeys.AI_PROVIDER] ?: "Groq",
             aiApiKey = prefs[PreferenceKeys.AI_API_KEY] ?: "",
             aiModel = prefs[PreferenceKeys.AI_MODEL] ?: "llama-3.3-70b-versatile",
-            pureAmoledBlack = prefs[PreferenceKeys.PURE_AMOLED_BLACK] ?: false
+            pureAmoledBlack = prefs[PreferenceKeys.PURE_AMOLED_BLACK] ?: true,
+            cornerStyle = prefs[PreferenceKeys.CORNER_STYLE] ?: "Balanced (12dp)",
+            streamingQuality = prefs[PreferenceKeys.STREAMING_QUALITY] ?: "High (256k AAC)"
         )
     }
 
@@ -381,6 +389,18 @@ class ThemePreferencesRepository(private val context: Context) {
     suspend fun setWidgetShowFavorite(show: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[PreferenceKeys.WIDGET_SHOW_FAVORITE] = show
+        }
+    }
+
+    suspend fun setCornerStyle(style: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.CORNER_STYLE] = style
+        }
+    }
+
+    suspend fun setStreamingQuality(quality: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.STREAMING_QUALITY] = quality
         }
     }
 }

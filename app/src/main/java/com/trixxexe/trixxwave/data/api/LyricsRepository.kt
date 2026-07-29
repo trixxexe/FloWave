@@ -93,8 +93,8 @@ class LyricsRepository(private val client: OkHttpClient) {
             {
                 "context": {
                     "client": {
-                        "clientName": "WEB",
-                        "clientVersion": "2.20231011.00.00"
+                        "clientName": "${InnerTubeConfig.WEB_NAME}",
+                        "clientVersion": "${InnerTubeConfig.webVersion}"
                     }
                 },
                 "videoId": "$videoId"

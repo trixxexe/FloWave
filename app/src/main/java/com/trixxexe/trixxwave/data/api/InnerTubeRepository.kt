@@ -19,30 +19,43 @@ class InnerTubeRepository(private val client: OkHttpClient) {
         runCatching {
             // 1. If it is already a direct HTTP/HTTPS stream link, return it
             if (videoIdOrQuery.startsWith("http://") || videoIdOrQuery.startsWith("https://")) {
+                println("[A3 Stream Resolver] Direct stream URL provided: $videoIdOrQuery")
                 return@runCatching videoIdOrQuery
             }
 
-            // 2. If title & artist are provided, try iTunes direct high-res stream preview (AAC 256kbps)
-            if (title.isNotEmpty()) {
-                val itunesStream = fetchItunesStream(title, artist)
-                if (itunesStream != null) return@runCatching itunesStream
+            // 2. Try InnerTube Player API with dynamic STS and configurable client identities (Full tracks)
+            try {
+                InnerTubeConfig.fetchDynamicSts(client)
+            } catch (e: Exception) {
+                // Ignore dynamic STS fetch error, fallback to default
             }
 
-            // 3. Try Invidious / Piped Mirrors for YouTube VideoId
-            val invidiousStream = fetchInvidiousStream(videoIdOrQuery)
-            if (invidiousStream != null) return@runCatching invidiousStream
-
-            // 4. Try InnerTube Player API
-            var url = fetchInnerTubeStream(videoIdOrQuery, "ANDROID_MUSIC", "7.02.52")
+            var url = fetchInnerTubeStream(videoIdOrQuery, InnerTubeConfig.ANDROID_MUSIC_NAME, InnerTubeConfig.androidMusicVersion)
             if (url == null) {
-                url = fetchInnerTubeStream(videoIdOrQuery, "WEB_REMIX", "1.20240108.01.00")
+                url = fetchInnerTubeStream(videoIdOrQuery, InnerTubeConfig.WEB_REMIX_NAME, InnerTubeConfig.webRemixVersion)
             }
-            if (url != null) return@runCatching url
+            if (url == null) {
+                url = fetchInnerTubeStream(videoIdOrQuery, InnerTubeConfig.IOS_NAME, InnerTubeConfig.iosVersion)
+            }
+            if (url != null) {
+                println("[A3 Stream Resolver] Resolved InnerTube direct full audio stream for ID $videoIdOrQuery: $url")
+                return@runCatching url
+            }
 
-            // 5. Try JioSaavn direct fallback if title is present
+            // 3. Try Invidious / Piped Mirrors for YouTube VideoId (Full tracks)
+            val invidiousStream = fetchInvidiousStream(videoIdOrQuery)
+            if (invidiousStream != null) {
+                println("[A3 Stream Resolver] Resolved Invidious webm/opus audio stream for ID $videoIdOrQuery: $invidiousStream")
+                return@runCatching invidiousStream
+            }
+
+            // 4. Try JioSaavn direct fallback if title is present (Full tracks)
             if (title.isNotEmpty()) {
                 val saavnStream = fetchSaavnStream(title, artist)
-                if (saavnStream != null) return@runCatching saavnStream
+                if (saavnStream != null) {
+                    println("[A3 Stream Resolver] Resolved JioSaavn audio stream for '$title': $saavnStream")
+                    return@runCatching saavnStream
+                }
             }
 
             throw IOException("Could not extract stream URL for $videoIdOrQuery")
@@ -171,17 +184,7 @@ class InnerTubeRepository(private val client: OkHttpClient) {
     }
 
     private fun searchInnerTube(query: String): List<Song> {
-        val payload = """
-            {
-                "context": {
-                    "client": {
-                        "clientName": "WEB_REMIX",
-                        "clientVersion": "1.20240108.01.00"
-                    }
-                },
-                "query": "$query"
-            }
-        """.trimIndent()
+        val payload = InnerTubeConfig.buildSearchPayload(query)
 
         val request = Request.Builder()
             .url("https://music.youtube.com/youtubei/v1/search")
@@ -283,17 +286,11 @@ class InnerTubeRepository(private val client: OkHttpClient) {
     }
 
     private fun fetchInnerTubeStream(videoId: String, clientName: String, clientVersion: String): String? {
-        val payload = """
-            {
-                "context": {
-                    "client": {
-                        "clientName": "$clientName",
-                        "clientVersion": "$clientVersion"
-                    }
-                },
-                "videoId": "$videoId"
-            }
-        """.trimIndent()
+        val payload = InnerTubeConfig.buildPlayerPayload(
+            videoId = videoId,
+            clientName = clientName,
+            clientVersion = clientVersion
+        )
 
         val request = Request.Builder()
             .url("https://music.youtube.com/youtubei/v1/player")

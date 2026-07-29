@@ -97,6 +97,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { themePreferencesRepo.setPureAmoledBlack(enabled) }
     }
 
+    fun setCornerStyle(style: String) {
+        viewModelScope.launch { themePreferencesRepo.setCornerStyle(style) }
+    }
+
+    fun setStreamingQuality(quality: String) {
+        viewModelScope.launch { themePreferencesRepo.setStreamingQuality(quality) }
+    }
+
     fun setUserProfile(name: String, avatar: String) {
         viewModelScope.launch { themePreferencesRepo.setUserProfile(name, avatar) }
     }
