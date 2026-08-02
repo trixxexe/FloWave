@@ -1,5 +1,6 @@
 package com.trixxexe.trixxwave.data.api
 
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.atomic.AtomicInteger
@@ -15,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference
  * extract the latest `signatureTimestamp` (STS) directly from YouTube's live player JS at runtime.
  */
 object InnerTubeConfig {
+    private const val TAG = "InnerTubeConfig"
 
     // --- CLIENT IDENTITIES (UPDATED REGULARLY) ---
     const val ANDROID_MUSIC_NAME = "ANDROID_MUSIC"
@@ -78,14 +80,14 @@ object InnerTubeConfig {
                     if (extractedSts != null && extractedSts > 0) {
                         cachedSts.set(extractedSts)
                         cachedPlayerJsUrl.set(fullJsUrl)
-                        println("[InnerTubeConfig] Dynamically extracted live YouTube STS: $extractedSts from $fullJsUrl")
+                        Log.d(TAG, "Dynamically extracted live YouTube STS: $extractedSts from $fullJsUrl")
                         return extractedSts
                     }
                 }
             }
             cachedSts.get()
         } catch (e: Exception) {
-            println("[InnerTubeConfig] STS dynamic extraction fallback to cached STS: ${cachedSts.get()} (${e.message})")
+            Log.d(TAG, "STS dynamic extraction fallback to cached STS: ${cachedSts.get()} (${e.message})")
             cachedSts.get()
         }
     }

@@ -92,6 +92,7 @@ class ThemePreferencesRepository(private val context: Context) {
         val PURE_AMOLED_BLACK = booleanPreferencesKey("pure_amoled_black")
         val CORNER_STYLE = stringPreferencesKey("corner_style")
         val STREAMING_QUALITY = stringPreferencesKey("streaming_quality")
+        val DOWNLOAD_LOCATION = stringPreferencesKey("download_location")
     }
 
     val isFirstRunFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -401,6 +402,12 @@ class ThemePreferencesRepository(private val context: Context) {
     suspend fun setStreamingQuality(quality: String) {
         context.dataStore.edit { prefs ->
             prefs[PreferenceKeys.STREAMING_QUALITY] = quality
+        }
+    }
+
+    suspend fun setDownloadLocation(location: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PreferenceKeys.DOWNLOAD_LOCATION] = location
         }
     }
 }

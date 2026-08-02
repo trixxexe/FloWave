@@ -42,14 +42,26 @@ fun TrixxWaveTheme(
     val bgColor = if (isLight) Color(0xFFF8FAFC) else if (themeConfig.mode == "Dark Charcoal") Color(0xFF0F0F12) else Color(0xFF000000)
     val surfaceColor = if (isLight) Color(0xFFFFFFFF) else Color(0xFF121212)
 
-    val colorScheme = DarkColorScheme.copy(
-        primary = accentColor,
-        secondary = accentColor.copy(alpha = 0.8f),
-        background = bgColor,
-        surface = surfaceColor,
-        onBackground = if (isLight) Color(0xFF0F172A) else Color(0xFFFAFAFA),
-        onSurface = if (isLight) Color(0xFF0F172A) else Color(0xFFFAFAFA)
-    )
+    val colorScheme = if (isLight) {
+        lightColorScheme(
+            primary = accentColor,
+            secondary = accentColor.copy(alpha = 0.8f),
+            background = bgColor,
+            surface = surfaceColor,
+            onBackground = Color(0xFF0F172A),
+            onSurface = Color(0xFF0F172A),
+            onSurfaceVariant = Color(0xFF64748B)
+        )
+    } else {
+        DarkColorScheme.copy(
+            primary = accentColor,
+            secondary = accentColor.copy(alpha = 0.8f),
+            background = bgColor,
+            surface = surfaceColor,
+            onBackground = if (themeConfig.mode == "Dark Charcoal") Color(0xFFFAFAFA) else Color(0xFFFAFAFA),
+            onSurface = if (themeConfig.mode == "Dark Charcoal") Color(0xFFFAFAFA) else Color(0xFFFAFAFA)
+        )
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {

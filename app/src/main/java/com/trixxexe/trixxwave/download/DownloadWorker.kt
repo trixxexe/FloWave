@@ -46,7 +46,7 @@ class DownloadWorker(
         val filename = "${safeTitle}_${safeArtist}.$extension"
 
         createNotificationChannel()
-        setForeground(createForegroundInfo(title, 0))
+        setForeground(createForegroundInfo(title, 0, videoId.hashCode()))
 
         try {
             // Download audio file to cache first
@@ -69,7 +69,7 @@ class DownloadWorker(
                             val now = System.currentTimeMillis()
                             if (now - lastReportTime > 500) {
                                 val progress = if (totalBytes > 0) (bytesCopied * 100 / totalBytes).toInt() else 0
-                                setForeground(createForegroundInfo(title, progress))
+                                setForeground(createForegroundInfo(title, progress, videoId.hashCode()))
                                 setProgress(workDataOf("progress" to progress, "videoId" to videoId))
                                 lastReportTime = now
                             }
@@ -166,7 +166,7 @@ class DownloadWorker(
         }
     }
 
-    private fun createForegroundInfo(title: String, progress: Int): ForegroundInfo {
+    private fun createForegroundInfo(title: String, progress: Int, notificationId: Int): ForegroundInfo {
         val notification = NotificationCompat.Builder(context, "download_channel")
             .setContentTitle("Downloading $title")
             .setContentText("$progress%")
@@ -174,7 +174,7 @@ class DownloadWorker(
             .setProgress(100, progress, progress == 0)
             .setOngoing(true)
             .build()
-        return ForegroundInfo(title.hashCode(), notification)
+        return ForegroundInfo(notificationId, notification)
     }
 
     private fun createNotificationChannel() {

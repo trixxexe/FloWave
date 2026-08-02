@@ -1032,6 +1032,11 @@ fun SettingsScreenContent(
     var selectedAiProvider by remember { mutableStateOf(themeConfig.aiProvider) }
     var selectedAiModel by remember { mutableStateOf(themeConfig.aiModel) }
 
+    LaunchedEffect(themeConfig.aiProvider, themeConfig.aiModel) {
+        selectedAiProvider = themeConfig.aiProvider
+        selectedAiModel = themeConfig.aiModel
+    }
+
     // Wallpaper Photo Picker Launcher
     val wallpaperPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -1434,6 +1439,41 @@ fun SettingsScreenContent(
                         )
                     }
                 }
+
+                val availableModels = when (selectedAiProvider) {
+                    "Gemini" -> listOf("gemini-2.0-flash", "gemini-1.5-pro")
+                    "OpenAI" -> listOf("gpt-4o-mini", "gpt-4o", "gpt-4-turbo")
+                    else -> listOf("llama-3.3-70b-versatile", "llama-3.1-70b-instruct")
+                }
+
+                Text(
+                    text = "AI Model",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+                Text(
+                    text = "Select the underlying model for ${selectedAiProvider}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFA0A0A0)
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    availableModels.forEach { model ->
+                        FilterChip(
+                            selected = selectedAiModel == model,
+                            onClick = { selectedAiModel = model },
+                            label = { Text(model) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accentColor,
+                                selectedLabelColor = Color.Black,
+                                containerColor = Color(0xFF1A1A1A),
+                                labelColor = Color.White
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = "API Key",
@@ -2376,7 +2416,7 @@ fun OnboardingProfileModal(
                                 }
 
                                 Text(
-                                    text = "Welcome to TrixxWave",
+                                     text = "Welcome to FloWave",
                                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                                     color = Color.White
                                 )
